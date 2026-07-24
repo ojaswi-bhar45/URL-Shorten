@@ -1,0 +1,173 @@
+{
+  "info": {
+    "name": "URL Shortener API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Body has messsage field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('messsage');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (valid)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://example.com\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 201', () => {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has required fields', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('id');",
+              "  pm.expect(body).to.have.property('shortCode');",
+              "  pm.expect(body).to.have.property('longUrl', 'https://example.com');",
+              "  pm.expect(body).to.have.property('createdAt');",
+              "});",
+              "",
+              "pm.test('Short code is 7 characters', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.shortCode).to.have.lengthOf(7);",
+              "});",
+              "",
+              "pm.collectionVariables.set('shortCode', pm.response.json().shortCode);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (invalid - empty body)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 400', () => {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Response has error field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (invalid - bad url)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"not-a-url\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 400', () => {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Response has error field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
