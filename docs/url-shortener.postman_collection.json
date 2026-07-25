@@ -31,9 +31,9 @@
               "  pm.response.to.have.status(200);",
               "});",
               "",
-              "pm.test('Body has messsage field', () => {",
+              "pm.test('Body has message field', () => {",
               "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('messsage');",
+              "  pm.expect(body).to.have.property('message');",
               "});"
             ]
           }
@@ -66,7 +66,7 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status is 201', () => {",
+              "pm.test('Status is 201 or 200', () => {",
               "  pm.response.to.have.status(201);",
               "});",
               "",
@@ -84,6 +84,46 @@
               "});",
               "",
               "pm.collectionVariables.set('shortCode', pm.response.json().shortCode);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (duplicate)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://example.com\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Returns existing short code', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('shortCode');",
+              "  pm.expect(body.shortCode).to.equal(pm.collectionVariables.get('shortCode'));",
+              "});"
             ]
           }
         }
@@ -146,7 +186,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"url\": \"not-a-url\"\n}"
+          "raw": "{\n  \"url\": \"javascript:alert(1)\"\n}"
         }
       },
       "event": [
@@ -159,10 +199,139 @@
               "  pm.response.to.have.status(400);",
               "});",
               "",
+              "pm.test('Response has error about URL scheme', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('URL must start with http:// or https://');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (invalid - non-http scheme)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"ftp://example.com/file.txt\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 400', () => {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Response has error about URL scheme', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('URL must start with http:// or https://');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Redirect URL (valid)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/{{shortCode}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["{{shortCode}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 302', () => {",
+              "  pm.response.to.have.status(302);",
+              "});",
+              "",
+              "pm.test('Response has Location header', () => {",
+              "  pm.response.to.have.header('Location');",
+              "  pm.expect(pm.response.headers.get('Location')).to.equal('https://example.com');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Redirect URL (not found)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/nonexistent123",
+          "host": ["{{baseUrl}}"],
+          "path": ["nonexistent123"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 404', () => {",
+              "  pm.response.to.have.status(404);",
+              "});",
+              "",
               "pm.test('Response has error field', () => {",
               "  const body = pm.response.json();",
               "  pm.expect(body).to.have.property('error');",
-              "  pm.expect(body.error).to.be.a('string');",
+              "  pm.expect(body.error).to.equal('URL not found');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unknown route",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/some-random-path",
+          "host": ["{{baseUrl}}"],
+          "path": ["some-random-path"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 404', () => {",
+              "  pm.response.to.have.status(404);",
+              "});",
+              "",
+              "pm.test('Response has error field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('Route not found');",
               "});"
             ]
           }
