@@ -1,11 +1,14 @@
 require("dotenv").config();
 const express = require("express");
 const urlRoutes = require("./routes/url.routes.js");
+const authRoutes = require("./routes/auth.routes.js");
 
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use("/", authRoutes);
 app.use("/", urlRoutes);
 
 let port = 3000;
