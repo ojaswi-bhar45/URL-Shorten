@@ -3,6 +3,7 @@ const { shortenSchema } = require("../schemas/url.schema");
 const prisma = require("../lib/prisma");
 const { customAlphabet } = require("nanoid");
 const { serializeBigInt } = require("../utils/serialize");
+const { auth } = require("../middleware/auth.middleware");
 
 const nanoid = customAlphabet(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
@@ -21,7 +22,7 @@ router.get("/health", async (req, res) => {
   }
 });
 
-router.post("/shorten", async (req, res) => {
+router.post("/shorten", auth, async (req, res) => {
   let result = shortenSchema.safeParse(req.body);
 
   if (!result.success) {
@@ -30,17 +31,22 @@ router.post("/shorten", async (req, res) => {
 
   try {
     let existing = await prisma.url.findFirst({
-      where: { longUrl: result.data.url },
+      where: { longUrl: result.data.url, userId: BigInt(req.userId) },
     });
 
     if (existing) {
-      return res.status(200).json(serializeBigInt(existing));
+      return res.status(200).json(existing);
     }
 
     let url = await prisma.url.create({
-      data: { longUrl: result.data.url, shortCode: nanoid() },
+      data: {
+        longUrl: result.data.url,
+        shortCode: nanoid(),
+        userId: BigInt(req.userId), // link to the logged-in user
+      },
     });
-    res.status(201).json(serializeBigInt(url));
+
+    res.status(201).json(url);
   } catch (err) {
     console.error("Prisma error:", err);
     res.status(500).json({ error: "Failed to create short URL" });
