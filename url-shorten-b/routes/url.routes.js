@@ -4,7 +4,7 @@ const prisma = require("../lib/prisma");
 const { customAlphabet } = require("nanoid");
 const { serializeBigInt } = require("../utils/serialize");
 const { auth } = require("../middleware/auth.middleware");
-
+const { redisClient } = require("../config/redis.js");
 const nanoid = customAlphabet(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   7,
@@ -57,6 +57,25 @@ router.get("/:code", async (req, res) => {
   let { code } = req.params;
 
   try {
+    //Check First in Redis Cache
+    let cachedUrl = await redisClient.get(`shortCode ${code}`);
+    if (cachedUrl) {
+      console.log("Cache Hit");
+
+      prisma.url
+        .update({
+          where: { shortCode: code },
+          data: { clickCount: { increment: 1 } },
+        })
+        .catch((err) => console.error("Prisma error: ", err));
+
+      return res.redirect(cachedUrl);
+    }
+
+    console.log("Cache Miss for ", code);
+
+    //FallBack to postgres if not found in Redis
+
     let url = await prisma.url.findUnique({ where: { shortCode: code } });
     if (!url) {
       return res.status(404).json({ error: "URL not found" });
@@ -64,6 +83,8 @@ router.get("/:code", async (req, res) => {
     if (url.expiry && new Date() > url.expiry) {
       return res.status(410).json({ error: "This link has expired" });
     }
+    // Populate Redis Cache with the URL for future requests
+    await redisClient.set(`shortCode ${code}`, url.longUrl, { EX: 3600 }); // Cache for 1 hour
 
     await prisma.url.update({
       where: { shortCode: code },

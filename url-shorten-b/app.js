@@ -14,12 +14,6 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/redis-test", async (req, res) => {
-  await redisClient.set("test_key", "hello from redis");
-  const value = await redisClient.get("test_key");
-  res.json({ value });
-});
-
 app.use("/", authRoutes);
 app.use("/", urlRoutes);
 
