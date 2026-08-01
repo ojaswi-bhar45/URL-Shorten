@@ -99,4 +99,18 @@ router.get("/:code", async (req, res) => {
   }
 });
 
+router.get("/me/urls", auth, async (req, res) => {
+  try {
+    let urls = await prisma.url.findMany({
+      where: { userId: BigInt(req.userId) },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(urls);
+  } catch (err) {
+    console.error("Prisma error:", err);
+    res.status(500).json({ error: "Failed to fetch user URLs" });
+  }
+});
+
 module.exports = router;

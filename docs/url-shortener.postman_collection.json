@@ -387,6 +387,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
           }
         ],
         "body": {
@@ -436,6 +440,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
           }
         ],
         "body": {
@@ -476,6 +484,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
           }
         ],
         "body": {
@@ -516,6 +528,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
           }
         ],
         "body": {
@@ -556,6 +572,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
           }
         ],
         "body": {
@@ -577,6 +597,106 @@
               "  const body = pm.response.json();",
               "  pm.expect(body).to.have.property('error');",
               "  pm.expect(body.error).to.equal('URL must start with http:// or https://');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get My URLs (valid)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/me/urls",
+          "host": ["{{baseUrl}}"],
+          "path": ["me", "urls"]
+        },
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response is an array', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get My URLs (empty)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/me/urls",
+          "host": ["{{baseUrl}}"],
+          "path": ["me", "urls"]
+        },
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response is an empty array', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.be.an('array');",
+              "  pm.expect(body).to.have.lengthOf(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get My URLs (unauthorized)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/me/urls",
+          "host": ["{{baseUrl}}"],
+          "path": ["me", "urls"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 401', () => {",
+              "  pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test('Response has error field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
               "});"
             ]
           }
