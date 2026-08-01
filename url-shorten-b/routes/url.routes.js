@@ -5,6 +5,7 @@ const { customAlphabet } = require("nanoid");
 const { serializeBigInt } = require("../utils/serialize");
 const { auth } = require("../middleware/auth.middleware");
 const { redisClient } = require("../config/redis.js");
+const { rateLimit } = require("../middleware/rateLimit.middleware");
 const nanoid = customAlphabet(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   7,
@@ -22,7 +23,7 @@ router.get("/health", async (req, res) => {
   }
 });
 
-router.post("/shorten", auth, async (req, res) => {
+router.post("/shorten", auth, rateLimit("shorten"), async (req, res) => {
   let result = shortenSchema.safeParse(req.body);
 
   if (!result.success) {
