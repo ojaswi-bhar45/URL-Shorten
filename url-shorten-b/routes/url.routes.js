@@ -55,13 +55,14 @@ router.post("/shorten", auth, rateLimit("shorten"), async (req, res) => {
 });
 
 router.get("/:code", async (req, res) => {
+  let start = Date.now();
   let { code } = req.params;
 
   try {
     //Check First in Redis Cache
     let cachedUrl = await redisClient.get(`shortCode ${code}`);
     if (cachedUrl) {
-      console.log("Cache Hit");
+      console.log(`Cache Hit for ${code} - ${Date.now() - start}ms`);
 
       prisma.url
         .update({
@@ -73,7 +74,7 @@ router.get("/:code", async (req, res) => {
       return res.redirect(cachedUrl);
     }
 
-    console.log("Cache Miss for ", code);
+    console.log(`Cache Miss for ${code} - ${Date.now() - start}ms`);
 
     //FallBack to postgres if not found in Redis
 
