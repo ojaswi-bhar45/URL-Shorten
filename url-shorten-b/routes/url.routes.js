@@ -6,6 +6,7 @@ const { serializeBigInt } = require("../utils/serialize");
 const { auth } = require("../middleware/auth.middleware");
 const { redisClient } = require("../config/redis.js");
 const { rateLimit } = require("../middleware/rateLimit.middleware");
+const { producer } = require("../kafka.js");
 const nanoid = customAlphabet(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   7,
@@ -60,45 +61,62 @@ router.get("/:code", async (req, res) => {
 
   try {
     //Check First in Redis Cache
-    let cachedUrl = await redisClient.get(`shortCode ${code}`);
+    let cachedUrl = await redisClient.get(`shortCode:${code}`);
     if (cachedUrl) {
       console.log(`Cache Hit for ${code} - ${Date.now() - start}ms`);
-
-      prisma.url
-        .update({
-          where: { shortCode: code },
-          data: { clickCount: { increment: 1 } },
-        })
-        .catch((err) => console.error("Prisma error: ", err));
-
+      publishClickEvent(req, code);
       return res.redirect(cachedUrl);
     }
 
     console.log(`Cache Miss for ${code} - ${Date.now() - start}ms`);
 
     //FallBack to postgres if not found in Redis
+    let result = await getFromDbAndCache(code);
 
-    let url = await prisma.url.findUnique({ where: { shortCode: code } });
-    if (!url) {
-      return res.status(404).json({ error: "URL not found" });
+    if (!result.found) {
+      return res.status(404).json({ error: "Short URL not found" });
     }
-    if (url.expiry && new Date() > url.expiry) {
+    if (result.expired) {
       return res.status(410).json({ error: "This link has expired" });
     }
-    // Populate Redis Cache with the URL for future requests
-    await redisClient.set(`shortCode ${code}`, url.longUrl, { EX: 3600 }); // Cache for 1 hour
 
-    await prisma.url.update({
-      where: { shortCode: code },
-      data: { clickCount: { increment: 1 } },
-    });
+    publishClickEvent(req, code);
 
-    return res.redirect(url.longUrl);
+    return res.redirect(result.longUrl);
   } catch (err) {
     console.error("Redirect error:", err);
     res.status(500).json({ error: "Something went wrong" });
   }
 });
+
+async function getFromDbAndCache(code) {
+  const url = await prisma.url.findUnique({ where: { shortCode: code } });
+
+  if (!url) return { found: false, expired: false };
+  if (url.expiry && new Date() > url.expiry) return { found: true, expired: true };
+
+  await redisClient.set(`shortCode:${code}`, url.longUrl, { EX: 3600 }); // Cache for 1 hour
+  return { found: true, expired: false, longUrl: url.longUrl };
+}
+
+function publishClickEvent(req, code) {
+  producer
+    .send({
+      topic: "link-clicked",
+      messages: [
+        {
+          value: JSON.stringify({
+            shortCode: code,
+            timestamp: new Date().toISOString(),
+            ip: req.ip,
+            userAgent: req.headers["user-agent"] || null,
+            referrer: req.headers["referer"] || null,
+          }),
+        },
+      ],
+    })
+    .catch((err) => console.error("Kafka publish error:", err));
+}
 
 router.get("/me/urls", auth, async (req, res) => {
   try {

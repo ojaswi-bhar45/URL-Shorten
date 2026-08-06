@@ -10,7 +10,7 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - Duplicate URL detection — returns the existing short code instead of creating a duplicate
 - Per-user URL ownership — links tied to the creating user's account
 - Fast redirects with caching — Redis cache-aside pattern on the redirect path (1-hour TTL)
-- Click tracking — every redirect increments the URL's click count
+- Click tracking — every redirect publishes a fire-and-forget event to Kafka (`link-clicked`); the redirect path performs no DB write
 - Link expiry — expired links return `410 Gone`
 - Rate limiting on URL creation — Redis-based fixed window, 5 req/min per user
 - Input validation — Zod schemas; URL scheme whitelisting (`http://` / `https://`)
@@ -26,6 +26,7 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - Node.js + Express
 - PostgreSQL + Prisma ORM (driver adapter)
 - Redis (caching + rate limiting)
+- Kafka / Redpanda (`kafkajs`) — async click-event streaming
 - JWT + bcrypt (auth)
 - Zod (validation)
 
@@ -34,6 +35,7 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - Node.js (v24 or newer)
 - PostgreSQL (running, with a database created)
 - Redis (running, or a Redis Cloud instance)
+- Kafka/Redpanda (optional — recommended; the service fails open, so redirects work even if the broker is down)
 
 ## Setup
 
@@ -93,9 +95,11 @@ curl -X POST http://localhost:3000/shorten \
 
 ## How It Works
 
-- **Redirects** check Redis first (`shortCode <code>`, 1h TTL). On a hit the URL
-  is served immediately and the click count is incremented asynchronously. On a
-  miss, PostgreSQL is queried, the cache is populated, and the click counted.
+- **Redirects** check Redis first (`shortCode:<code>`, 1h TTL). On a hit the URL
+  is served immediately. On a miss, PostgreSQL is queried, the cache is
+  populated, and the URL served. Either way a click event is published to Kafka
+  (`link-clicked`) fire-and-forget — **the redirect path never writes to
+  Postgres**, keeping it fast and decoupled from analytics writes.
 - **Rate limiting** uses Redis `INCR`/`EXPIRE` for a fixed window (5 req/60s) on
   `/shorten`, keyed by user ID (or IP when unauthenticated), returning `429`
   with the remaining wait time.
@@ -123,6 +127,8 @@ curl -X POST http://localhost:3000/shorten \
 │   └── prisma.js                # Prisma client (pg adapter)
 ├── utils/
 │   └── serialize.js             # BigInt-safe serialization
+├── kafka.js                     # Kafka client + producer
+├── kafka-consumer.js            # Consumes link-clicked events
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
 
@@ -133,6 +139,6 @@ curl -X POST http://localhost:3000/shorten \
 ## Roadmap
 
 - Analytics dashboard (clicks over time, referrers, geolocation)
-- Async event processing for click counting
+- Click-event consumer that writes `clickCount` back to Postgres asynchronously
 - Read replicas for horizontal scaling
 - Custom short codes and expiry management

@@ -13,7 +13,7 @@ Today the platform delivers:
 - Collision-free short code generation
 - Duplicate URL detection (per user)
 - Fast redirects backed by an in-memory distributed cache (Redis)
-- Click counting
+- Click tracking via async Kafka events (read/write decoupling)
 - Optional link expiry
 - Per-user / per-IP rate limiting on shortening
 
@@ -24,8 +24,9 @@ Today the platform delivers:
 | Runtime          | Node.js (CommonJS)                  | JavaScript execution environment               |
 | Web framework    | Express 5                           | HTTP routing, middleware pipeline              |
 | ORM / Data       | Prisma 7 + PostgreSQL (pg adapter)  | Type-safe database access, schema management   |
-| Cache            | Redis (redis client 6)              | URL cache + rate-limit counters                |
-| Auth             | JWT + bcrypt                        | Stateless session tokens, password hashing     |
+| Cache            | Redis (redis client 6)          | URL cache + rate-limit counters                |
+| Event streaming   | Kafka/Redpanda (kafkajs)        | Fire-and-forget click-event publishing         |
+| Auth             | JWT + bcrypt                    | Stateless session tokens, password hashing     |
 | Validation       | Zod                                 | Request payload validation                     |
 | Code generation  | nanoid                              | Collision-free short code generation           |
 
@@ -43,6 +44,8 @@ flowchart LR
     Prisma --> PG[(PostgreSQL)]
     Routes -->|read / write cache| Redis[(Redis)]
     Redis -->|cache miss fallback| Routes
+    Routes -->|publish click event| Kafka[Kafka / Redpanda]
+    Kafka --> Consumer[Click-event Consumer]
 ```
 
 ```
@@ -72,6 +75,15 @@ flowchart LR
               │ (source of     │  │  rate counters    │
               │  truth)        │  └───────────────────┘
               └────────────────┘
+                        │ publish click event
+              ┌─────────▼──────────────────────────┐
+              │  Kafka / Redpanda (link-clicked)   │
+              │  fire-and-forget, no DB write      │
+              └─────────┬──────────────────────────┘
+                        │
+              ┌─────────▼──────────────────────────┐
+              │  Click-event consumer (async)      │
+              └────────────────────────────────────┘
 ```
 
 ## 4. Request Lifecycle
@@ -89,13 +101,17 @@ flowchart LR
 
 ### 4.2 Redirect (`GET /:code`)
 
-1. Look up `shortCode <code>` in Redis.
-2. **Cache hit** → increment `clickCount` in PostgreSQL (fire-and-forget) and
+1. Look up `shortCode:<code>` in Redis.
+2. **Cache hit** → publish a click event to Kafka (fire-and-forget) and
    **302 redirect** immediately to the cached long URL.
 3. **Cache miss** → query PostgreSQL. On success:
    - If the link has expired, return **410 Gone**.
-   - Populate Redis with a 1-hour TTL, increment `clickCount`, and redirect.
+   - Populate Redis with a 1-hour TTL, publish the click event, and redirect.
    - If no record exists, return **404**.
+
+The redirect path is **read-only** — it never writes to PostgreSQL. Every click is
+published to the `link-clicked` topic and consumed asynchronously, decoupling the
+latency-sensitive read path from the write-heavy analytics path.
 
 ### 4.3 Authentication (`POST /signup`, `POST /login`)
 
@@ -116,6 +132,8 @@ flowchart LR
 | Validation schemas           | `schemas/*.js`                      | Zod schemas for auth and URL payloads                 |
 | Prisma client                | `lib/prisma.js`                     | PrismaClient with PostgreSQL driver adapter           |
 | Redis client                 | `config/redis.js`                   | Redis connection from environment variables           |
+| Kafka client / producer      | `kafka.js`                          | Kafka connection, producer for `link-clicked`        |
+| Click-event consumer         | `kafka-consumer.js`                 | Consumes `link-clicked` events (currently logging only) |
 | Serialization helper         | `utils/serialize.js`                | BigInt-safe JSON serialization                        |
 | Prisma schema / migrations   | `prisma/`                           | Data model + SQL migration history                    |
 
@@ -166,10 +184,12 @@ erDiagram
 
 - **Pattern:** Cache-aside (lazy population). The cache is checked first; on a
   miss the database is read and the cache populated.
-- **Key:** `shortCode <code>` → long URL string.
+- **Key:** `shortCode:<code>` → long URL string.
 - **TTL:** 1 hour (`EX: 3600`).
-- **Click counting:** on cache hits the counter is incremented asynchronously so
-  the redirect is not blocked by the write.
+- **Click tracking:** every redirect publishes a fire-and-forget event to Kafka
+  (`link-clicked`) with `shortCode`, `timestamp`, `ip`, `userAgent`, `referrer`.
+  The redirect path performs **no DB write**, so it is not blocked by analytics
+  writes; the write is decoupled to an asynchronous consumer.
 - **Impact:** repeated redirects of popular links are served from memory without
   touching PostgreSQL.
 
@@ -216,13 +236,16 @@ url-shorten-b/
 │   └── prisma.js                # Prisma client (pg adapter)
 ├── utils/
 │   └── serialize.js             # BigInt-safe serialization
+├── kafka.js                     # Kafka client + producer
+├── kafka-consumer.js            # Consumes link-clicked events
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
 
 ## 11. Future Roadmap
 
 - **Analytics dashboard** — clicks over time, referrers, geolocation.
-- **Async event processing** — decouple click-counting via a queue/broker.
+- **Click-event consumer** — write `clickCount` back to Postgres
+  asynchronously from the `link-clicked` topic.
 - **Read replication** — offload reads to replicas for horizontal scaling.
 - **Multiple app instances** — Redis already provides shared cache + rate
   counters, ready for stateless horizontal scaling.
