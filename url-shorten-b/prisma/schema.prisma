@@ -34,3 +34,15 @@ model Url {
 
   @@map("urls")
 }
+
+model ClickEvent {
+  id         BigInt   @id @default(autoincrement())
+  shortCode  String
+  ip         String?
+  userAgent  String?
+  referrer   String?
+  clickedAt  DateTime @default(now())
+
+  @@map("click_events")
+  @@index([shortCode])
+}

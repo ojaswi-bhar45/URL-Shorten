@@ -110,8 +110,10 @@ flowchart LR
    - If no record exists, return **404**.
 
 The redirect path is **read-only** — it never writes to PostgreSQL. Every click is
-published to the `link-clicked` topic and consumed asynchronously, decoupling the
-latency-sensitive read path from the write-heavy analytics path.
+published to the `link-clicked` topic and consumed asynchronously by a standalone
+consumer that inserts an analytics row (`click_events`) and increments
+`clickCount`, decoupling the latency-sensitive read path from the write-heavy
+analytics path.
 
 ### 4.3 Authentication (`POST /signup`, `POST /login`)
 
@@ -133,7 +135,7 @@ latency-sensitive read path from the write-heavy analytics path.
 | Prisma client                | `lib/prisma.js`                     | PrismaClient with PostgreSQL driver adapter           |
 | Redis client                 | `config/redis.js`                   | Redis connection from environment variables           |
 | Kafka client / producer      | `kafka.js`                          | Kafka connection, producer for `link-clicked`        |
-| Click-event consumer         | `kafka-consumer.js`                 | Consumes `link-clicked` events (currently logging only) |
+| Click-event consumer         | `consumer.js`                       | Inserts `click_events` row + increments `clickCount` |
 | Serialization helper         | `utils/serialize.js`                | BigInt-safe JSON serialization                        |
 | Prisma schema / migrations   | `prisma/`                           | Data model + SQL migration history                    |
 
@@ -157,6 +159,14 @@ erDiagram
         datetime expiry
         bigint clickCount
     }
+    CLICKEVENTS {
+        bigint id PK
+        string shortCode
+        string ip
+        string userAgent
+        string referrer
+        datetime clickedAt
+    }
 ```
 
 ### `users`
@@ -178,7 +188,18 @@ erDiagram
 | `userId`     | BigInt?  | Nullable FK → `users.id` (`ON DELETE SET NULL`) |
 | `createdAt`  | DateTime | Defaults to now                           |
 | `expiry`     | DateTime?| Nullable; expired links return **410**    |
-| `clickCount` | BigInt   | Click counter, incremented on each visit  |
+| `clickCount` | BigInt   | Denormalized counter, incremented by the consumer |
+
+### `click_events`
+
+| Column      | Type     | Notes                                    |
+| ----------- | -------- | ---------------------------------------- |
+| `id`        | BigInt   | Auto-increment primary key               |
+| `shortCode` | String   | Indexed; the shortened code that was hit |
+| `ip`        | String?  | Clicker IP address (from the event)      |
+| `userAgent` | String?  | Clicker User-Agent (from the event)      |
+| `referrer`  | String?  | HTTP referrer (from the event)           |
+| `clickedAt` | DateTime | Event timestamp; defaults to now         |
 
 ## 7. Caching Strategy
 
@@ -188,8 +209,10 @@ erDiagram
 - **TTL:** 1 hour (`EX: 3600`).
 - **Click tracking:** every redirect publishes a fire-and-forget event to Kafka
   (`link-clicked`) with `shortCode`, `timestamp`, `ip`, `userAgent`, `referrer`.
-  The redirect path performs **no DB write**, so it is not blocked by analytics
-  writes; the write is decoupled to an asynchronous consumer.
+  A standalone consumer (`consumer.js`) inserts the event into `click_events` and
+  increments `clickCount` asynchronously. The redirect path performs **no DB
+  write**, so it is not blocked by analytics writes; the write is decoupled to
+  an asynchronous consumer.
 - **Impact:** repeated redirects of popular links are served from memory without
   touching PostgreSQL.
 
@@ -237,15 +260,13 @@ url-shorten-b/
 ├── utils/
 │   └── serialize.js             # BigInt-safe serialization
 ├── kafka.js                     # Kafka client + producer
-├── kafka-consumer.js            # Consumes link-clicked events
+├── consumer.js                  # Standalone consumer: ClickEvent insert + clickCount write-back
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
 
 ## 11. Future Roadmap
 
 - **Analytics dashboard** — clicks over time, referrers, geolocation.
-- **Click-event consumer** — write `clickCount` back to Postgres
-  asynchronously from the `link-clicked` topic.
 - **Read replication** — offload reads to replicas for horizontal scaling.
 - **Multiple app instances** — Redis already provides shared cache + rate
   counters, ready for stateless horizontal scaling.

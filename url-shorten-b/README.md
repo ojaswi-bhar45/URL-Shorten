@@ -10,7 +10,7 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - Duplicate URL detection — returns the existing short code instead of creating a duplicate
 - Per-user URL ownership — links tied to the creating user's account
 - Fast redirects with caching — Redis cache-aside pattern on the redirect path (1-hour TTL)
-- Click tracking — every redirect publishes a fire-and-forget event to Kafka (`link-clicked`); the redirect path performs no DB write
+- Click tracking — every redirect publishes a fire-and-forget event to Kafka (`link-clicked`); a standalone consumer writes the analytics record and updates `clickCount` asynchronously
 - Link expiry — expired links return `410 Gone`
 - Rate limiting on URL creation — Redis-based fixed window, 5 req/min per user
 - Input validation — Zod schemas; URL scheme whitelisting (`http://` / `https://`)
@@ -100,6 +100,9 @@ curl -X POST http://localhost:3000/shorten \
   populated, and the URL served. Either way a click event is published to Kafka
   (`link-clicked`) fire-and-forget — **the redirect path never writes to
   Postgres**, keeping it fast and decoupled from analytics writes.
+- **Consumer** (`consumer.js`, run as a separate process) reads `link-clicked`
+  events, inserts a row into `click_events`, and increments `clickCount` on the
+  matching URL asynchronously.
 - **Rate limiting** uses Redis `INCR`/`EXPIRE` for a fixed window (5 req/60s) on
   `/shorten`, keyed by user ID (or IP when unauthenticated), returning `429`
   with the remaining wait time.
@@ -128,7 +131,7 @@ curl -X POST http://localhost:3000/shorten \
 ├── utils/
 │   └── serialize.js             # BigInt-safe serialization
 ├── kafka.js                     # Kafka client + producer
-├── kafka-consumer.js            # Consumes link-clicked events
+├── consumer.js                  # Standalone consumer: ClickEvent insert + clickCount write-back
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
 
@@ -139,6 +142,5 @@ curl -X POST http://localhost:3000/shorten \
 ## Roadmap
 
 - Analytics dashboard (clicks over time, referrers, geolocation)
-- Click-event consumer that writes `clickCount` back to Postgres asynchronously
 - Read replicas for horizontal scaling
 - Custom short codes and expiry management

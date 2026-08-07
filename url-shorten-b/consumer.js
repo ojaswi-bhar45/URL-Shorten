@@ -1,26 +1,53 @@
+require("dotenv").config();
+
 const { kafka } = require("./kafka.js");
+const prisma = require("./lib/prisma.js");
 
-const consumer = kafka.consumer({ groupId: "url-shorten-b-verify" });
+const consumer = kafka.consumer({ groupId: "analytics-consumer-group" });
 
-async function main() {
+async function run() {
   await consumer.connect();
-  await consumer.subscribe({ topic: "link-clicked", fromBeginning: true });
+  console.log("Consumer connected");
+
+  await consumer.subscribe({ topic: "link-clicked", fromBeginning: false });
+
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      console.log(
-        `Received on ${topic}[${partition}]: ${message.value.toString()}`,
-      );
+      try {
+        const event = JSON.parse(message.value.toString());
+        console.log("Processing click event:", event);
+
+        await prisma.clickEvent.create({
+          data: {
+            shortCode: event.shortCode,
+            ip: event.ip,
+            userAgent: event.userAgent,
+            referrer: event.referrer,
+            clickedAt: new Date(event.timestamp),
+          },
+        });
+
+        await prisma.url.update({
+          where: { shortCode: event.shortCode },
+          data: { clickCount: { increment: 1 } },
+        });
+
+        console.log(`Processed click for ${event.shortCode}`);
+      } catch (err) {
+        console.error("Error processing message:", err);
+        // TODO: in production, send failed messages to a dead-letter queue
+      }
     },
   });
-  console.log("Consumer running on topic 'link-clicked'. Press Ctrl+C to exit.");
 }
 
-main().catch((err) => {
-  console.error("Consumer error:", err);
+run().catch((err) => {
+  console.error("Consumer crashed:", err);
   process.exit(1);
 });
 
 process.on("SIGINT", async () => {
   await consumer.disconnect();
+  await prisma.$disconnect();
   process.exit(0);
 });
