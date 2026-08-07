@@ -71,6 +71,7 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 | GET    | `/health`  | —      | —            | Database connectivity check          | 200 `{ message }` |
 | POST   | `/shorten` | Bearer | Yes (5/60s)  | Create a short URL for `{ url }`     | 200 (existing) / 201 (created) |
 | GET    | `/:code`   | —      | —            | Redirect to the long URL             | 302 redirect |
+| GET    | `/analytics/:code` | — | —       | Total clicks + 10 most recent click events | 200 `{ shortCode, totalClicks, recentClicks }` |
 
 ### Error codes
 
@@ -117,7 +118,8 @@ curl -X POST http://localhost:3000/shorten \
 │   └── migrations/              # SQL migrations
 ├── routes/
 │   ├── auth.routes.js           # /signup, /login
-│   └── url.routes.js            # /health, /shorten, /:code
+│   ├── url.routes.js            # /health, /shorten, /:code, /me/urls
+│   └── analytics.routes.js      # /analytics/:code
 ├── middleware/
 │   ├── auth.middleware.js       # JWT verification
 │   └── rateLimit.middleware.js  # Redis fixed-window limiter

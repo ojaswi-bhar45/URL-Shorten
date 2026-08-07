@@ -7,6 +7,7 @@ BigInt.prototype.toJSON = function () {
 const express = require("express");
 const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
+const analyticsRoutes = require("./routes/analytics.routes.js");
 const { redisClient } = require("./config/redis.js");
 const { producer } = require("./kafka.js");
 
@@ -31,6 +32,7 @@ app.get("/kafka-test", async (req, res) => {
 });
 
 app.use("/", urlRoutes);
+app.use("/", analyticsRoutes);
 
 let port = 3000;
 

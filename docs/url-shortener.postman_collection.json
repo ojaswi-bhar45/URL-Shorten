@@ -1,6 +1,7 @@
 {
   "info": {
     "name": "URL Shortener API",
+    "description": "URL Shortener & Analytics Platform API collection. Run requests in order against a fresh database. Note: POST /shorten is rate limited to 5 requests per 60 seconds per user - wait 60 seconds between full collection runs. Click analytics require the Kafka consumer (consumer.js) to be running.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -11,6 +12,31 @@
     },
     {
       "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "emptyAuthToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "emptyEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "shortCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
       "value": "",
       "type": "string"
     }
@@ -183,6 +209,95 @@
           ]
         },
         {
+          "name": "Signup (missing fields)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["signup"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Response has error field', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('error');",
+                  "  pm.expect(body.error).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Signup (empty user)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["signup"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emptyEmail}}\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('emptyEmail', 'empty' + Date.now() + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has id and email', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body).to.have.property('email');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Login (valid)",
           "request": {
             "method": "POST",
@@ -342,6 +457,87 @@
               }
             }
           ]
+        },
+        {
+          "name": "Login (invalid email format)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["login"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"bad\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error is Invalid email address', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('error');",
+                  "  pm.expect(body.error).to.equal('Invalid email address');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (empty user)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["login"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emptyEmail}}\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has token', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('token');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('emptyAuthToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -404,8 +600,8 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status is 201 or 200', () => {",
-              "  pm.response.to.have.status(201);",
+              "pm.test('Status is 200 or 201', () => {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
               "});",
               "",
               "pm.test('Response has required fields', () => {",
@@ -465,6 +661,46 @@
               "  const body = pm.response.json();",
               "  pm.expect(body).to.have.property('shortCode');",
               "  pm.expect(body.shortCode).to.equal(pm.collectionVariables.get('shortCode'));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (unauthorized)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://example.com\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 401', () => {",
+              "  pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test('Error is missing or invalid authorization header', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('Missing or invalid authorization header');",
               "});"
             ]
           }
@@ -604,6 +840,86 @@
       ]
     },
     {
+      "name": "Shorten URL (rate limited)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const baseUrl = pm.collectionVariables.get('baseUrl');",
+              "const email = 'ratelimit_' + Date.now() + '@example.com';",
+              "",
+              "const signup = {",
+              "  url: baseUrl + '/signup',",
+              "  method: 'POST',",
+              "  header: [{ key: 'Content-Type', value: 'application/json' }],",
+              "  body: { mode: 'raw', raw: JSON.stringify({ email, password: 'password123' }) }",
+              "};",
+              "",
+              "const login = {",
+              "  url: baseUrl + '/login',",
+              "  method: 'POST',",
+              "  header: [{ key: 'Content-Type', value: 'application/json' }],",
+              "  body: { mode: 'raw', raw: JSON.stringify({ email, password: 'password123' }) }",
+              "};",
+              "",
+              "const shorten = (token, i) => ({",
+              "  url: baseUrl + '/shorten',",
+              "  method: 'POST',",
+              "  header: [",
+              "    { key: 'Content-Type', value: 'application/json' },",
+              "    { key: 'Authorization', value: 'Bearer ' + token }",
+              "  ],",
+              "  body: { mode: 'raw', raw: JSON.stringify({ url: 'https://example.com/rate-limit-' + i }) }",
+              "});",
+              "",
+              "pm.sendRequest(signup, () => {",
+              "  pm.sendRequest(login, (loginErr, loginRes) => {",
+              "    const token = loginRes.json().token;",
+              "    let sent = 0;",
+              "    const sendNext = () => {",
+              "      if (sent >= 5) {",
+              "        pm.sendRequest(shorten(token, 6), (err, res) => {",
+              "          pm.test('Rate limited to 429 on the 6th request', () => {",
+              "            pm.expect(res.code).to.equal(429);",
+              "            pm.expect(res.json().error).to.include('Rate limit exceeded');",
+              "          });",
+              "        });",
+              "        return;",
+              "      }",
+              "      pm.sendRequest(shorten(token, sent), (err, res) => {",
+              "        sent++;",
+              "        sendNext();",
+              "      });",
+              "    };",
+              "    sendNext();",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Get My URLs (valid)",
       "request": {
         "method": "GET",
@@ -632,6 +948,12 @@
               "pm.test('Response is an array', () => {",
               "  const body = pm.response.json();",
               "  pm.expect(body).to.be.an('array');",
+              "});",
+              "",
+              "pm.test('Array contains the created short code', () => {",
+              "  const body = pm.response.json();",
+              "  const codes = body.map((u) => u.shortCode);",
+              "  pm.expect(codes).to.include(pm.collectionVariables.get('shortCode'));",
               "});"
             ]
           }
@@ -650,7 +972,7 @@
         "header": [
           {
             "key": "Authorization",
-            "value": "Bearer {{authToken}}"
+            "value": "Bearer {{emptyAuthToken}}"
           }
         ]
       },
@@ -697,6 +1019,67 @@
               "pm.test('Response has error field', () => {",
               "  const body = pm.response.json();",
               "  pm.expect(body).to.have.property('error');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics (valid)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/analytics/{{shortCode}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["analytics", "{{shortCode}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has shortCode, totalClicks, recentClicks', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('shortCode', pm.collectionVariables.get('shortCode'));",
+              "  pm.expect(body).to.have.property('totalClicks').and.to.be.a('string');",
+              "  pm.expect(body).to.have.property('recentClicks').and.to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics (not found)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/analytics/nonexistent123",
+          "host": ["{{baseUrl}}"],
+          "path": ["analytics", "nonexistent123"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 404', () => {",
+              "  pm.response.to.have.status(404);",
+              "});",
+              "",
+              "pm.test('Response has error field', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('Short URL not found');",
               "});"
             ]
           }
@@ -755,7 +1138,7 @@
               "pm.test('Response has error field', () => {",
               "  const body = pm.response.json();",
               "  pm.expect(body).to.have.property('error');",
-              "  pm.expect(body.error).to.equal('URL not found');",
+              "  pm.expect(body.error).to.equal('Short URL not found');",
               "});"
             ]
           }

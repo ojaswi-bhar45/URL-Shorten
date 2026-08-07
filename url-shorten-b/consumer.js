@@ -17,6 +17,21 @@ async function run() {
         const event = JSON.parse(message.value.toString());
         console.log("Processing click event:", event);
 
+        if (!event.shortCode) {
+          console.warn("Skipping malformed event (missing shortCode)");
+          return;
+        }
+
+        const urlExists = await prisma.url.findUnique({
+          where: { shortCode: event.shortCode },
+          select: { id: true },
+        });
+
+        if (!urlExists) {
+          console.warn(`Skipping event for unknown shortCode: ${event.shortCode}`);
+          return;
+        }
+
         await prisma.clickEvent.create({
           data: {
             shortCode: event.shortCode,
@@ -47,6 +62,14 @@ run().catch((err) => {
 });
 
 process.on("SIGINT", async () => {
+  console.log("Shutting down consumer...");
+  await consumer.disconnect();
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("Shutting down consumer...");
   await consumer.disconnect();
   await prisma.$disconnect();
   process.exit(0);
