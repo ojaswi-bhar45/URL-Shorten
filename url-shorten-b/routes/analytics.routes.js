@@ -15,6 +15,27 @@ router.get("/analytics/:code", async (req, res) => {
 
     const totalClicks = url.clickCount;
 
+    //Clicks per days(last 7 days)
+    const clickOverTime = await prisma.$queryRaw`
+      SELECT DATE("clickedAt") as date, COUNT(*)::int as clicks
+      FROM click_events
+      WHERE "shortCode" = ${code}
+      AND "clickedAt" >= NOW() - INTERVAL '7 days'
+      GROUP BY DATE("clickedAt")
+      ORDER BY date ASC`;
+
+    //Top References
+
+    const topRefernces = await prisma.clickEvent.groupBy({
+      by: ["referrer"],
+      where: { shortCode: code, referrer: { not: null } },
+      _count: { referrer: true },
+      orderBy: { _count: { referrer: "desc" } },
+      take: 5,
+    });
+
+    //Recent raw click (keep from yesterday)
+
     const recentClicks = await prisma.clickEvent.findMany({
       where: { shortCode: code },
       orderBy: { clickedAt: "desc" },
@@ -24,6 +45,11 @@ router.get("/analytics/:code", async (req, res) => {
     res.status(200).json({
       shortCode: code,
       totalClicks: totalClicks.toString(),
+      clickOverTime,
+      topRefernces: topRefernces.map((r) => ({
+        referrer: r.referrer,
+        count: r._count.referrer,
+      })),
       recentClicks,
     });
   } catch (err) {
@@ -33,3 +59,55 @@ router.get("/analytics/:code", async (req, res) => {
 });
 
 module.exports = router;
+
+// //router.get("/analytics/:code", async (req, res) => {
+//   const { code } = req.params;
+
+//   try {
+//     const url = await prisma.url.findUnique({ where: { shortCode: code } });
+
+//     if (!url) {
+//       return res.status(404).json({ error: "Short URL not found" });
+//     }
+
+//     // Clicks per day (last 7 days)
+//     const clicksOverTime = await prisma.$queryRaw`
+//       SELECT DATE("clickedAt") as date, COUNT(*)::int as clicks
+//       FROM click_events
+//       WHERE "shortCode" = ${code}
+//         AND "clickedAt" >= NOW() - INTERVAL '7 days'
+//       GROUP BY DATE("clickedAt")
+//       ORDER BY date ASC
+//     `;
+
+//     // Top referrers
+//     const topReferrers = await prisma.clickEvent.groupBy({
+//       by: ["referrer"],
+//       where: { shortCode: code, referrer: { not: null } },
+//       _count: { referrer: true },
+//       orderBy: { _count: { referrer: "desc" } },
+//       take: 5,
+//     });
+
+//     // Recent raw clicks (keep from yesterday)
+//     const recentClicks = await prisma.clickEvent.findMany({
+//       where: { shortCode: code },
+//       orderBy: { clickedAt: "desc" },
+//       take: 10,
+//     });
+
+//     res.status(200).json({
+//       shortCode: code,
+//       totalClicks: url.clickCount.toString(),
+//       clicksOverTime,
+//       topReferrers: topReferrers.map((r) => ({
+//         referrer: r.referrer,
+//         count: r._count.referrer,
+//       })),
+//       recentClicks,
+//     });
+//   } catch (err) {
+//     console.error("Analytics error:", err);
+//     res.status(500).json({ error: "Failed to fetch analytics" });
+//   }
+// });

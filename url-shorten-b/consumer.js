@@ -47,7 +47,7 @@ async function run() {
           data: { clickCount: { increment: 1 } },
         });
 
-        console.log(`Processed click for ${event.shortCode}`);
+        console.log(`✅ Processed click for ${event.shortCode}`);
       } catch (err) {
         console.error("Error processing message:", err);
         // TODO: in production, send failed messages to a dead-letter queue
