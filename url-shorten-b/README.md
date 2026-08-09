@@ -30,6 +30,17 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - JWT + bcrypt (auth)
 - Zod (validation)
 
+
+## Event-Driven Analytics
+- Click events are published to Kafka (`link-clicked` topic) instead of writing directly to the database on every redirect
+- A separate consumer service processes events asynchronously, decoupling the read-heavy redirect path from write-heavy analytics
+- Consumer uses a consumer group (`analytics-consumer-group`) to support future horizontal scaling
+- Tested resilience: killing the consumer mid-traffic does not lose data — Kafka retains messages until the consumer resumes and catches up
+
+## Analytics
+- `GET /analytics/:code` returns total clicks, clicks-per-day (last 7 days), and top referrers
+
+
 ## Prerequisites
 
 - Node.js (v24 or newer)
