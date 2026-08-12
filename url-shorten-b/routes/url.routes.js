@@ -2,11 +2,10 @@ const { Router } = require("express");
 const { shortenSchema } = require("../schemas/url.schema");
 const prisma = require("../lib/prisma");
 const { customAlphabet } = require("nanoid");
-const { serializeBigInt } = require("../utils/serialize");
 const { auth } = require("../middleware/auth.middleware");
 const { redisClient } = require("../config/redis.js");
 const { rateLimit } = require("../middleware/rateLimit.middleware");
-const { producer } = require("../kafka.js");
+const { sendToKafka } = require("../kafka.js");
 const nanoid = customAlphabet(
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   7,
@@ -100,22 +99,17 @@ async function getFromDbAndCache(code) {
 }
 
 function publishClickEvent(req, code) {
-  producer
-    .send({
-      topic: "link-clicked",
-      messages: [
-        {
-          value: JSON.stringify({
-            shortCode: code,
-            timestamp: new Date().toISOString(),
-            ip: req.ip,
-            userAgent: req.headers["user-agent"] || null,
-            referrer: req.headers["referer"] || null,
-          }),
-        },
-      ],
-    })
-    .catch((err) => console.error("Kafka publish error:", err));
+  sendToKafka("link-clicked", [
+    {
+      value: JSON.stringify({
+        shortCode: code,
+        timestamp: new Date().toISOString(),
+        ip: req.ip,
+        userAgent: req.headers["user-agent"] || null,
+        referrer: req.headers["referer"] || null,
+      }),
+    },
+  ]);
 }
 
 router.get("/me/urls", auth, async (req, res) => {

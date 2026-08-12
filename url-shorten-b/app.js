@@ -9,7 +9,7 @@ const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
 const analyticsRoutes = require("./routes/analytics.routes.js");
 const { redisClient } = require("./config/redis.js");
-const { producer } = require("./kafka.js");
+const { connect, sendToKafka } = require("./kafka.js");
 
 const app = express();
 
@@ -20,10 +20,9 @@ app.use("/", authRoutes);
 
 app.get("/kafka-test", async (req, res) => {
   try {
-    await producer.send({
-      topic: "link-clicked",
-      messages: [{ value: JSON.stringify({ test: "hello from kafka" }) }],
-    });
+    await sendToKafka("link-clicked", [
+      { value: JSON.stringify({ test: "hello from kafka" }) },
+    ]);
     res.status(200).json({ message: "Message sent to Kafka" });
   } catch (error) {
     console.error("Error sending message to Kafka:", error);
@@ -53,12 +52,7 @@ async function start() {
     console.error("Redis connection error:", err);
   }
 
-  try {
-    await producer.connect();
-    console.log("Kafka producer connected");
-  } catch (err) {
-    console.error("Kafka producer connection error:", err);
-  }
+  connect(); // fire-and-forget; producer connects lazily on first send
 
   app.listen(port, () => {
     console.log(`Server is listening on port ${port}`);

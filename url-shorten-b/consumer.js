@@ -32,20 +32,21 @@ async function run() {
           return;
         }
 
-        await prisma.clickEvent.create({
-          data: {
-            shortCode: event.shortCode,
-            ip: event.ip,
-            userAgent: event.userAgent,
-            referrer: event.referrer,
-            clickedAt: new Date(event.timestamp),
-          },
-        });
-
-        await prisma.url.update({
-          where: { shortCode: event.shortCode },
-          data: { clickCount: { increment: 1 } },
-        });
+        await prisma.$transaction([
+          prisma.clickEvent.create({
+            data: {
+              shortCode: event.shortCode,
+              ip: event.ip,
+              userAgent: event.userAgent,
+              referrer: event.referrer,
+              clickedAt: new Date(event.timestamp),
+            },
+          }),
+          prisma.url.update({
+            where: { shortCode: event.shortCode },
+            data: { clickCount: { increment: 1 } },
+          }),
+        ]);
 
         console.log(`✅ Processed click for ${event.shortCode}`);
       } catch (err) {
