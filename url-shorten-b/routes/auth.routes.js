@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const { signupSchema, loginSchema } = require("../schemas/auth.schema");
-const prisma = require("../lib/prisma");
+const prisma = require("../db.js");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 

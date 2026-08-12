@@ -1,9 +1,9 @@
 const { Router } = require("express");
 const { shortenSchema } = require("../schemas/url.schema");
-const prisma = require("../lib/prisma");
+const prisma = require("../db.js");
 const { customAlphabet } = require("nanoid");
 const { auth } = require("../middleware/auth.middleware");
-const { redisClient } = require("../config/redis.js");
+const { redisClient } = require("../redis.js");
 const { rateLimit } = require("../middleware/rateLimit.middleware");
 const { sendToKafka } = require("../kafka.js");
 const nanoid = customAlphabet(

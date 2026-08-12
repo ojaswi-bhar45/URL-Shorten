@@ -1,4 +1,4 @@
-const { redisClient } = require("../config/redis.js");
+const { redisClient } = require("../redis.js");
 
 let LIMIT = 5; // max requests per window
 let WINDOW = 60; //seconds
@@ -23,7 +23,7 @@ function rateLimit(keyPrefix) {
       }
       next();
     } catch (err) {
-      console.log("Rate limit error: ", err);
+      console.error("Rate limit error: ", err);
       next();
     }
   };

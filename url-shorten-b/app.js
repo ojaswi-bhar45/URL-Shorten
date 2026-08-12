@@ -8,8 +8,8 @@ const express = require("express");
 const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
 const analyticsRoutes = require("./routes/analytics.routes.js");
-const { redisClient } = require("./config/redis.js");
-const { connect, sendToKafka } = require("./kafka.js");
+const { redisClient } = require("./redis.js");
+const { connect } = require("./kafka.js");
 
 const app = express();
 
@@ -17,18 +17,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/", authRoutes);
-
-app.get("/kafka-test", async (req, res) => {
-  try {
-    await sendToKafka("link-clicked", [
-      { value: JSON.stringify({ test: "hello from kafka" }) },
-    ]);
-    res.status(200).json({ message: "Message sent to Kafka" });
-  } catch (error) {
-    console.error("Error sending message to Kafka:", error);
-    res.status(500).json({ error: "Failed to send message to Kafka" });
-  }
-});
 
 app.use("/", urlRoutes);
 app.use("/", analyticsRoutes);
@@ -40,7 +28,10 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.log("Unhandled error:", err);
+  console.error("Unhandled error:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
   res.status(500).json({ error: "Internal server error" });
 });
 
@@ -59,4 +50,7 @@ async function start() {
   });
 }
 
-start();
+start().catch((err) => {
+  console.error("Server failed to start:", err);
+  process.exit(1);
+});
