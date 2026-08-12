@@ -31,6 +31,30 @@ rate limiting, async event processing, replication, and horizontal scaling.
 - Zod (validation)
 
 
+## Architecture
+
+```
+Client
+  │
+  ▼
+Express API ──────► Redis (cache)
+  │                     │
+  │                     ▼
+  │                 Postgres (urls table)
+  │
+  ▼
+Kafka (link-clicked topic)
+  │
+  ▼
+Consumer Service ──► Postgres (click_events, clickCount)
+```
+
+Redirects are served from Redis (with Postgres as the fallback source of
+truth); every click is published to Kafka and written to analytics by the
+consumer asynchronously. See [How It Works](#how-it-works) for the request
+lifecycle.
+
+
 ## Event-Driven Analytics
 - Click events are published to Kafka (`link-clicked` topic) instead of writing directly to the database on every redirect
 - A separate consumer service processes events asynchronously, decoupling the read-heavy redirect path from write-heavy analytics
