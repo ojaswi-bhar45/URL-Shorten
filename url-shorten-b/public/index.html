@@ -110,6 +110,18 @@
       <button id="copyBtn">Copy to Clipboard</button>
     </div>
 
+    <hr style="margin: 30px 0;" />
+
+    <h2>📊 Check Analytics</h2>
+    <input type="text" id="codeInput" placeholder="Enter short code (e.g. QjY7qMi)" />
+    <button id="checkBtn">Check Stats</button>
+
+    <div id="statsResult" style="display:none; margin-top:15px; padding:15px; background:white; border-radius:6px;">
+      <p><strong>Total Clicks:</strong> <span id="totalClicks"></span></p>
+      <p><strong>Top Referrers:</strong></p>
+      <ul id="referrersList"></ul>
+    </div>
+
     <script>
       let mode = "login";
       let token = localStorage.getItem("token");
@@ -258,6 +270,44 @@
           }, 1500);
         } catch (err) {
           showError("Could not copy to clipboard.");
+        }
+      });
+
+      let checkBtn = document.getElementById("checkBtn");
+      let codeInput = document.getElementById("codeInput");
+      let statsResult = document.getElementById("statsResult");
+      let totalClicksEl = document.getElementById("totalClicks");
+      let referrersList = document.getElementById("referrersList");
+
+      checkBtn.addEventListener("click", async () => {
+        let code = codeInput.value.trim();
+        if (!code) return;
+
+        try {
+          let res = await fetch(`/analytics/${code}`);
+          let data = await res.json();
+
+          if (!res.ok) {
+            alert(data.error || "Not found");
+            return;
+          }
+
+          totalClicksEl.textContent = data.totalClicks;
+          referrersList.innerHTML = "";
+
+          if (data.topRefernces.length === 0) {
+            referrersList.innerHTML = "<li>No referrer data yet</li>";
+          } else {
+            data.topRefernces.forEach((r) => {
+              let li = document.createElement("li");
+              li.textContent = `${r.referrer} — ${r.count} clicks`;
+              referrersList.appendChild(li);
+            });
+          }
+
+          statsResult.style.display = "block";
+        } catch (err) {
+          alert("Could not fetch analytics");
         }
       });
 
