@@ -2,7 +2,7 @@ const { Router } = require("express");
 const { shortenSchema } = require("../schemas/url.schema");
 const prisma = require("../db.js");
 const { customAlphabet } = require("nanoid");
-const { auth } = require("../middleware/auth.middleware");
+const { auth, optionalAuth } = require("../middleware/auth.middleware");
 const { redisClient } = require("../redis.js");
 const { rateLimit } = require("../middleware/rateLimit.middleware");
 const { sendToKafka } = require("../kafka.js");
@@ -23,7 +23,7 @@ router.get("/health", async (req, res) => {
   }
 });
 
-router.post("/shorten", auth, rateLimit("shorten"), async (req, res) => {
+router.post("/shorten", optionalAuth, rateLimit("shorten"), async (req, res) => {
   let result = shortenSchema.safeParse(req.body);
 
   if (!result.success) {
@@ -31,19 +31,23 @@ router.post("/shorten", auth, rateLimit("shorten"), async (req, res) => {
   }
 
   try {
-    let existing = await prisma.url.findFirst({
-      where: { longUrl: result.data.url, userId: BigInt(req.userId) },
-    });
+    let userId = req.userId ? BigInt(req.userId) : null;
 
-    if (existing) {
-      return res.status(200).json(existing);
+    if (userId) {
+      let existing = await prisma.url.findFirst({
+        where: { longUrl: result.data.url, userId },
+      });
+
+      if (existing) {
+        return res.status(200).json(existing);
+      }
     }
 
     let url = await prisma.url.create({
       data: {
         longUrl: result.data.url,
         shortCode: nanoid(),
-        userId: BigInt(req.userId), // link to the logged-in user
+        userId, // linked to the user when authenticated, null for anonymous
       },
     });
 

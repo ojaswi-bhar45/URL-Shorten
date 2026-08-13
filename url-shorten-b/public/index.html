@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>URL Shortener</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 600px;
+        margin: 60px auto;
+        padding: 0 20px;
+        background: #f7f7f8;
+      }
+      h1 {
+        font-size: 1.6em;
+      }
+      input,
+      button {
+        font-size: 1em;
+        padding: 10px;
+        margin-top: 10px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        cursor: pointer;
+        margin-top: 12px;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+      button:disabled {
+        background: #93b4f5;
+        cursor: not-allowed;
+      }
+      .toggle-btn {
+        background: transparent;
+        color: #2563eb;
+        border: 1px solid #2563eb;
+        margin-top: 16px;
+      }
+      .toggle-btn:hover {
+        background: #eef2ff;
+      }
+      .logout-btn {
+        background: #dc2626;
+      }
+      .logout-btn:hover {
+        background: #b91c1c;
+      }
+      #authSection,
+      #shortenSection {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+      #result {
+        margin-top: 20px;
+        padding: 15px;
+        background: white;
+        border-radius: 6px;
+        display: none;
+      }
+      #result a {
+        color: #2563eb;
+        word-break: break-all;
+      }
+      #error {
+        color: #dc2626;
+        margin-top: 10px;
+        display: none;
+      }
+      .hint {
+        color: #6b7280;
+        font-size: 0.9em;
+        margin: 0 0 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>URL Shortener</h1>
+
+    <div id="shortenSection">
+      <button id="logoutBtn" class="logout-btn" style="display: none">Log Out</button>
+      <p>Paste a Long URL, below to get a short link.</p>
+      <input type="text" id="longUrl" placeholder="Enter long URL here" />
+
+      <button id="shortenBtn">Shorten URL</button>
+    </div>
+
+    <div id="authSection">
+      <h2 id="authTitle">Log In</h2>
+      <p class="hint">Optional — log in to keep a history of your links and view analytics.</p>
+      <input type="email" id="email" placeholder="Email" autocomplete="email" />
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
+      <button id="authBtn">Log In</button>
+      <button id="toggleBtn" class="toggle-btn">Need an account? Sign Up</button>
+    </div>
+
+    <div id="error"></div>
+
+    <div id="result">
+      <strong>Your short URL:</strong><br />
+      <a id="shortLink" href="#" target="_blank"></a><br /><br />
+      <button id="copyBtn">Copy to Clipboard</button>
+    </div>
+
+    <script>
+      let mode = "login";
+      let token = localStorage.getItem("token");
+
+      let emailInput = document.getElementById("email");
+      let passwordInput = document.getElementById("password");
+      let authBtn = document.getElementById("authBtn");
+      let authTitle = document.getElementById("authTitle");
+      let toggleBtn = document.getElementById("toggleBtn");
+      let authSection = document.getElementById("authSection");
+      let logoutBtn = document.getElementById("logoutBtn");
+      let shortenSection = document.getElementById("shortenSection");
+      let longUrlInput = document.getElementById("longUrl");
+      let shortbtn = document.getElementById("shortenBtn");
+      let resultDiv = document.getElementById("result");
+      let shortLink = document.getElementById("shortLink");
+      let errorDiv = document.getElementById("error");
+      let copyBtn = document.getElementById("copyBtn");
+
+      function showError(message) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = "block";
+      }
+
+      function hideError() {
+        errorDiv.style.display = "none";
+      }
+
+      function setLoggedIn(isLoggedIn) {
+        authSection.style.display = isLoggedIn ? "none" : "block";
+        logoutBtn.style.display = isLoggedIn ? "block" : "none";
+        resultDiv.style.display = "none";
+        if (isLoggedIn) {
+          emailInput.value = "";
+          passwordInput.value = "";
+        }
+      }
+
+      toggleBtn.addEventListener("click", () => {
+        mode = mode === "login" ? "signup" : "login";
+        authTitle.textContent = mode === "login" ? "Log In" : "Sign Up";
+        authBtn.textContent = mode === "login" ? "Log In" : "Sign Up";
+        toggleBtn.textContent =
+          mode === "login" ? "Need an account? Sign Up" : "Already have an account? Log In";
+      });
+
+      authBtn.addEventListener("click", async () => {
+        let email = emailInput.value.trim();
+        let password = passwordInput.value;
+        hideError();
+
+        if (!email || !password) {
+          showError("Please enter email and password.");
+          return;
+        }
+
+        authBtn.disabled = true;
+        authBtn.textContent = mode === "login" ? "Logging in..." : "Signing up...";
+
+        try {
+          let res = await fetch(`/${mode}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+
+          let data = await res.json();
+          if (!res.ok) {
+            showError(data.error || "Authentication failed.");
+            return;
+          }
+
+          if (mode === "signup") {
+            mode = "login";
+            authTitle.textContent = "Log In";
+            authBtn.textContent = "Log In";
+            toggleBtn.textContent = "Need an account? Sign Up";
+            passwordInput.value = "";
+            showError("Account created. Please log in.");
+            return;
+          }
+
+          token = data.token;
+          localStorage.setItem("token", token);
+          setLoggedIn(true);
+        } catch (err) {
+          showError("Network error. Is the server running?");
+        } finally {
+          authBtn.disabled = false;
+          authBtn.textContent = mode === "login" ? "Log In" : "Sign Up";
+        }
+      });
+
+      logoutBtn.addEventListener("click", () => {
+        token = null;
+        localStorage.removeItem("token");
+        setLoggedIn(false);
+      });
+
+      shortbtn.addEventListener("click", async () => {
+        let longUrl = longUrlInput.value.trim();
+        hideError();
+        resultDiv.style.display = "none";
+
+        if (!longUrl) {
+          showError("Please enter a URL.");
+          return;
+        }
+
+        shortbtn.disabled = true;
+        shortbtn.textContent = "Shortening...";
+
+        try {
+          let res = await fetch("/shorten", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ url: longUrl }),
+          });
+
+          let data = await res.json();
+          if (!res.ok) {
+            showError(data.error || "Failed to shorten URL.");
+            return;
+          }
+
+          shortLink.href = `/${data.shortCode}`;
+          shortLink.textContent = `${window.location.origin}/${data.shortCode}`;
+          resultDiv.style.display = "block";
+        } catch (err) {
+          showError("Network error. Is the server running?");
+        } finally {
+          shortbtn.disabled = false;
+          shortbtn.textContent = "Shorten URL";
+        }
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(shortLink.href);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy to Clipboard";
+          }, 1500);
+        } catch (err) {
+          showError("Could not copy to clipboard.");
+        }
+      });
+
+      setLoggedIn(Boolean(token));
+    </script>
+  </body>
+</html>

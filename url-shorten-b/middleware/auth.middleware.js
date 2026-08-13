@@ -21,4 +21,20 @@ function auth(req, res, next) {
   }
 }
 
-module.exports = { auth };
+function optionalAuth(req, res, next) {
+  let authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    let token = authHeader.split(" ")[1];
+    try {
+      let decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.userId = decoded.userId;
+    } catch (err) {
+      console.warn("Optional JWT verification failed, continuing anonymously:", err.message);
+    }
+  }
+
+  next();
+}
+
+module.exports = { auth, optionalAuth };

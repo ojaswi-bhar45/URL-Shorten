@@ -4,6 +4,7 @@ BigInt.prototype.toJSON = function () {
   return this.toString();
 };
 
+const path = require("path");
 const express = require("express");
 const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
@@ -15,6 +16,8 @@ const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", authRoutes);
 
