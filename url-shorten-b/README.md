@@ -181,3 +181,7 @@ curl -X POST http://localhost:3000/shorten \
 - Analytics dashboard (clicks over time, referrers, geolocation)
 - Read replicas for horizontal scaling
 - Custom short codes and expiry management
+
+
+## Deployment
+Live demo: _coming soon_ — currently runs locally via Docker Compose (see Setup section)
