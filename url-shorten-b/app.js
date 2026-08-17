@@ -6,6 +6,9 @@ BigInt.prototype.toJSON = function () {
 
 const path = require("path");
 const express = require("express");
+const helmet = require("helmet");
+const cors = require("cors");
+const morgan = require("morgan");
 const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
 const analyticsRoutes = require("./routes/analytics.routes.js");
@@ -14,6 +17,9 @@ const { connect } = require("./kafka.js");
 
 const app = express();
 
+app.use(helmet());
+app.use(cors());
+app.use(morgan("combined"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -24,7 +30,7 @@ app.use("/", authRoutes);
 app.use("/", urlRoutes);
 app.use("/", analyticsRoutes);
 
-let port = 3000;
+let port = process.env.PORT || 3000;
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
