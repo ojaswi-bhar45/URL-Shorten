@@ -1,0 +1,1 @@
+CREATE LOGIN [replicator] WITH PASSWORD = 'replpass123';
