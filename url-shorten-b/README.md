@@ -182,6 +182,10 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 |---|---|---|---|
 | `PORT` | No | Server listen port | `3000` |
 | `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://postgres:password@localhost:5432/url_shorten` |
+| `POSTGRES_USER` | Compose | Postgres superuser for the docker-compose containers | `admin` |
+| `POSTGRES_PASSWORD` | Compose | Postgres superuser password (**required** by `docker compose up`) | Strong secret |
+| `POSTGRES_DB` | No (Compose) | Database created on first boot | `urlshortener` |
+| `REPLICATION_PASSWORD` | Compose | Password for the `replicator` role (primary init + replica bootstrap; **required** by `docker compose up`) | Strong secret |
 | `JWT_SECRET` | Yes | Secret used to sign JWT tokens | Replace with a strong random string |
 | `JWT_EXPIRES_IN` | No | Token expiry duration | `1h` |
 | `REDIS_HOST` | Yes | Redis host | `localhost` |
@@ -326,9 +330,11 @@ url-shorten-b/
 | Setting | Value | Why it's OK locally |
 |---|---|---|
 | `pg_hba.conf` host auth | `trust` (no password) | Postgres is Docker-isolated and unreachable from outside the machine |
-| Postgres credentials | `admin` / `admin123` | Same as above |
-| Replication credentials | `replicator` / `replpass123` | Same as above |
+| Postgres credentials | Sourced from `.env` (`POSTGRES_*`) — placeholder-strength values are fine here | Same as above |
+| Replication credentials | Sourced from `.env` (`REPLICATION_PASSWORD`) — not committed to git | Same as above |
 | CORS | All origins allowed when `CORS_ORIGIN` is unset | No untrusted origins locally |
+
+> **Note on git history:** earlier commits contained hardcoded placeholder credentials (`admin123`, `replpass123`). They are only valid for a throwaway local stack, but if this repository is ever made public, treat those values as burned and rotate everything — and remember they remain recoverable from history regardless of later edits.
 
 ### Known tradeoffs
 

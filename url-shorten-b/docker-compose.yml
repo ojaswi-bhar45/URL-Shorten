@@ -21,9 +21,10 @@ services:
     image: postgres:16
     container_name: postgres-primary
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
-      POSTGRES_DB: urlshortener
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-urlshortener}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:?Set REPLICATION_PASSWORD in .env}
     command: >
       postgres
       -c wal_level=replica
@@ -45,7 +46,7 @@ services:
     image: postgres:16
     container_name: postgres-replica
     environment:
-      REPLICATION_PASSWORD: replpass123
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:?Set REPLICATION_PASSWORD in .env}
     ports:
       - "5433:5432"
     volumes:
