@@ -1,1 +1,1 @@
-CREATE LOGIN [replicator] WITH PASSWORD = 'replpass123';
+CREATE ROLE replicator WITH LOGIN REPLICATION PASSWORD 'replpass123';

@@ -189,6 +189,7 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 | `REDIS_USERNAME` | Yes | Redis username | `default` |
 | `REDIS_PASSWORD` | Yes | Redis password | Your Redis password |
 | `KAFKA_BROKER` | No | Comma-separated Kafka broker addresses | `localhost:9092` |
+| `CORS_ORIGIN` | No | Comma-separated allowed origins; unset allows all (dev only) | `http://localhost:3000` |
 
 ## API Reference
 
@@ -308,6 +309,41 @@ url-shorten-b/
 │   └── index.html               # Vanilla JS frontend — shorten, auth, analytics checker
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
+
+## Security Notes
+
+### What's already solid
+
+- **Passwords** — bcrypt hashing (cost factor 10); plaintext never stored or logged
+- **Sessions** — signed JWTs with expiry, verified on every protected request
+- **User enumeration** — login returns the same `Invalid email or password` for unknown emails and wrong passwords
+- **Input validation** — Zod schemas on every endpoint; URL scheme whitelist (`http://` / `https://`) blocks `javascript:` and other dangerous schemes
+- **SQL injection** — Prisma parameterizes all queries by default. The one raw query (analytics clicks-over-time) uses a `$queryRaw` tagged template literal, which is also auto-parameterized. Do not switch to `$queryRawUnsafe` with string interpolation.
+- **Error responses** — handlers return generic messages (`500`, `404`); stack traces and `err.message` stay in server logs only
+
+### Local-only simplifications (never deploy as-is)
+
+| Setting | Value | Why it's OK locally |
+|---|---|---|
+| `pg_hba.conf` host auth | `trust` (no password) | Postgres is Docker-isolated and unreachable from outside the machine |
+| Postgres credentials | `admin` / `admin123` | Same as above |
+| Replication credentials | `replicator` / `replpass123` | Same as above |
+| CORS | All origins allowed when `CORS_ORIGIN` is unset | No untrusted origins locally |
+
+### Known tradeoffs
+
+- **Rate limiter fails open** — if Redis is down, requests pass through unthrottled rather than taking the service down. Deliberate availability-over-strictness choice.
+- **Click events are fire-and-forget** — if Kafka is unreachable at publish time, the click event is dropped (redirect still succeeds). Failed consumer processing is logged, not retried (dead-letter queue is on the roadmap).
+
+### Pre-deployment checklist
+
+- [ ] Replace all DB/Redis/Kafka credentials with strong secrets from a secrets manager (not `.env` in the image)
+- [ ] Switch `pg_hba.conf` from `trust` to `scram-sha-256` with per-service users and least privilege
+- [ ] Set `CORS_ORIGIN` to your real frontend origin(s)
+- [ ] Never expose ports 5432 (Postgres), 6379 (Redis), or 9092 (Kafka) publicly — bind them to an internal network
+- [ ] Use TLS for database/cache/broker connections
+- [ ] Keep `.env` out of version control (already gitignored) and out of images
+- [ ] Set a strong `JWT_SECRET` (long random string) and consider short-lived access tokens + refresh flow
 
 ## Documentation
 

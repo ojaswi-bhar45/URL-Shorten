@@ -17,8 +17,12 @@ const { connect } = require("./kafka.js");
 
 const app = express();
 
+const corsOptions = process.env.CORS_ORIGIN
+  ? { origin: process.env.CORS_ORIGIN.split(",").map((o) => o.trim()) }
+  : {}; // unset = allow all origins (local dev only)
+
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(morgan("combined"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

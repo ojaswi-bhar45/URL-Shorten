@@ -16,39 +16,45 @@ services:
       - "9092:9092"
 
 
+
   postgres-primary:
     image: postgres:16
     container_name: postgres-primary
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgre123
-      POSTGRES_DB: url_shorten
-    command: |
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: urlshortener
+    command: >
       postgres
       -c wal_level=replica
       -c max_wal_senders=5
-      -c max_replication_slots=5
       -c hot_standby=on
+      -c hba_file=/var/lib/postgresql/data/pg_hba.conf
     ports:
       - "5432:5432"
     volumes:
       - primary_data:/var/lib/postgresql/data
       - ./primary-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d urlshortener"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   postgres-replica:
     image: postgres:16
     container_name: postgres-replica
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgre123
-      POSTGRES_DB: url_shorten
-      PGUSER: postgres
+      REPLICATION_PASSWORD: replpass123
     ports:
       - "5433:5432"
-    depends_on:
-      - postgres-primary
     volumes:
       - replica_data:/var/lib/postgresql/data
+      - ./replica-init:/bootstrap:ro
+    command: ["bash", "/bootstrap/replica-init.sh"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
 
 volumes:
   primary_data:
