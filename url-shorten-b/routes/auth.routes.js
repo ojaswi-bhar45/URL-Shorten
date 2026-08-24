@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const { signupSchema, loginSchema } = require("../schemas/auth.schema");
-const prisma = require("../db.js");
+const { prismaPrimary } = require("../db.js");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
@@ -16,14 +16,14 @@ router.post("/signup", async (req, res) => {
   let { email, password } = result.data;
 
   try {
-    let existingUser = await prisma.user.findUnique({ where: { email } });
+    let existingUser = await prismaPrimary.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ error: "Email already exists" });
     }
 
     let hashedPassword = await bcrypt.hash(password, 10);
 
-    let user = await prisma.user.create({
+    let user = await prismaPrimary.user.create({
       data: { email, passwordHash: hashedPassword },
     });
 
@@ -48,7 +48,7 @@ router.post("/login", async (req, res) => {
   let { email, password } = result.data;
 
   try {
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await prismaPrimary.user.findUnique({ where: { email } });
     if (!user) {
       return res.status(400).json({ error: "Invalid email or password" });
     }

@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const { kafka } = require("./kafka.js");
-const prisma = require("./db.js");
+const { prismaPrimary } = require("./db.js");
 
 const consumer = kafka.consumer({ groupId: "analytics-consumer-group" });
 
@@ -21,7 +21,7 @@ async function run() {
           return;
         }
 
-        const urlExists = await prisma.url.findUnique({
+        const urlExists = await prismaPrimary.url.findUnique({
           where: { shortCode: event.shortCode },
           select: { id: true },
         });
@@ -31,8 +31,8 @@ async function run() {
           return;
         }
 
-        await prisma.$transaction([
-          prisma.clickEvent.create({
+        await prismaPrimary.$transaction([
+          prismaPrimary.clickEvent.create({
             data: {
               shortCode: event.shortCode,
               ip: event.ip,
@@ -41,7 +41,7 @@ async function run() {
               clickedAt: new Date(event.timestamp),
             },
           }),
-          prisma.url.update({
+          prismaPrimary.url.update({
             where: { shortCode: event.shortCode },
             data: { clickCount: { increment: 1 } },
           }),
@@ -64,7 +64,7 @@ run().catch((err) => {
 async function shutdown() {
   console.log("Shutting down consumer...");
   await consumer.disconnect();
-  await prisma.$disconnect();
+  await prismaPrimary.$disconnect();
   process.exit(0);
 }
 

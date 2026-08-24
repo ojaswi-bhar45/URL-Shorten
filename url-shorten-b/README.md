@@ -355,6 +355,12 @@ url-shorten-b/
 
 - [architecture.md](./architecture.md) — full system design document with Mermaid diagrams, component responsibilities, and data model ER diagrams
 
+## Replication
+
+- PostgreSQL primary handles all writes (URL creation, click event ingestion)
+- A streaming read replica handles analytics queries, offloading read traffic from the primary
+- Redirect lookups intentionally stay on the primary rather than the replica, since replication lag could otherwise cause a just-created link to briefly 404 on the read path
+
 ## Roadmap
 
 - Analytics dashboard — clicks over time, referrers, geolocation

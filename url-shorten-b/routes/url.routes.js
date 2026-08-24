@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { shortenSchema } = require("../schemas/url.schema");
-const prisma = require("../db.js");
+const { prismaPrimary } = require("../db.js");
+
 const { customAlphabet } = require("nanoid");
 const { auth, optionalAuth } = require("../middleware/auth.middleware");
 const { redisClient } = require("../redis.js");
@@ -15,7 +16,7 @@ const router = Router();
 
 router.get("/health", async (req, res) => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await prismaPrimary.$queryRaw`SELECT 1`;
     res.json({ message: "Database connected" });
   } catch (err) {
     console.error("Prisma error:", err);
@@ -34,7 +35,7 @@ router.post("/shorten", optionalAuth, rateLimit("shorten"), async (req, res) => 
     let userId = req.userId ? BigInt(req.userId) : null;
 
     if (userId) {
-      let existing = await prisma.url.findFirst({
+      let existing = await prismaPrimary.url.findFirst({
         where: { longUrl: result.data.url, userId },
       });
 
@@ -43,7 +44,7 @@ router.post("/shorten", optionalAuth, rateLimit("shorten"), async (req, res) => 
       }
     }
 
-    let url = await prisma.url.create({
+    let url = await prismaPrimary.url.create({
       data: {
         longUrl: result.data.url,
         shortCode: nanoid(),
@@ -93,7 +94,7 @@ router.get("/:code", async (req, res) => {
 });
 
 async function getFromDbAndCache(code) {
-  const url = await prisma.url.findUnique({ where: { shortCode: code } });
+  const url = await prismaPrimary.url.findUnique({ where: { shortCode: code } });
 
   if (!url) return { found: false, expired: false };
   if (url.expiry && new Date() > url.expiry) return { found: true, expired: true };
@@ -118,7 +119,7 @@ function publishClickEvent(req, code) {
 
 router.get("/me/urls", auth, async (req, res) => {
   try {
-    let urls = await prisma.url.findMany({
+    let urls = await prismaPrimary.url.findMany({
       where: { userId: BigInt(req.userId) },
       orderBy: { createdAt: "desc" },
     });
