@@ -357,10 +357,10 @@ url-shorten-b/
 
 ## Replication
 
-- PostgreSQL primary handles all writes (URL creation, click event ingestion)
-- A streaming read replica handles analytics queries, offloading read traffic from the primary
-- Redirect lookups intentionally stay on the primary rather than the replica, since replication lag could otherwise cause a just-created link to briefly 404 on the read path
-
+## Replication
+- PostgreSQL primary handles all writes; a streaming read replica serves analytics queries
+- Redirect lookups intentionally stay on the primary to avoid replication-lag-related 404s on freshly created links
+- Analytics endpoint includes a health check with automatic fallback to primary if the replica is unavailable, prioritizing availability over strict read/write separation during an outage
 ## Roadmap
 
 - Analytics dashboard — clicks over time, referrers, geolocation
