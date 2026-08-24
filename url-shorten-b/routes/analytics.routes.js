@@ -1,13 +1,22 @@
 const { Router } = require("express");
-const { prismaReplica } = require("../db.js");
+const { prismaReplica, prismaPrimary } = require("../db.js");
 
 const router = Router();
 
 router.get("/analytics/:code", async (req, res) => {
   const { code } = req.params;
 
+  let db = prismaReplica;
+
   try {
-    const url = await prismaReplica.url.findUnique({ where: { shortCode: code } });
+    await prismaReplica.$queryRaw`SELECT 1`;
+  } catch {
+    console.warn("Replica unavailable, falling back to primary");
+    db = prismaPrimary;
+  }
+
+  try {
+    const url = await db.url.findUnique({ where: { shortCode: code } });
 
     if (!url) {
       return res.status(404).json({ error: "Short URL not found" });
@@ -16,7 +25,7 @@ router.get("/analytics/:code", async (req, res) => {
     const totalClicks = url.clickCount;
 
     //Clicks per days(last 7 days)
-    const clickOverTime = await prismaReplica.$queryRaw`
+    const clickOverTime = await db.$queryRaw`
       SELECT DATE("clickedAt") as date, COUNT(*)::int as clicks
       FROM click_events
       WHERE "shortCode" = ${code}
@@ -26,7 +35,7 @@ router.get("/analytics/:code", async (req, res) => {
 
     //Top References
 
-    const topRefernces = await prismaReplica.clickEvent.groupBy({
+    const topRefernces = await db.clickEvent.groupBy({
       by: ["referrer"],
       where: { shortCode: code, referrer: { not: null } },
       _count: { referrer: true },
@@ -36,7 +45,7 @@ router.get("/analytics/:code", async (req, res) => {
 
     //Recent raw click (keep from yesterday)
 
-    const recentClicks = await prismaReplica.clickEvent.findMany({
+    const recentClicks = await db.clickEvent.findMany({
       where: { shortCode: code },
       orderBy: { clickedAt: "desc" },
       take: 10,

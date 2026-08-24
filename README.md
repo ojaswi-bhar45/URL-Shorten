@@ -113,6 +113,11 @@ See [architecture.md](./architecture.md) for the full system design document wit
 - Consumer uses a consumer group (`analytics-consumer-group`) to support future horizontal scaling
 - Tested resilience: killing the consumer mid-traffic does not lose data — Kafka retains messages until the consumer resumes and catches up
 
+## Replication
+- PostgreSQL primary handles all writes; a streaming read replica serves analytics queries
+- Redirect lookups intentionally stay on the primary to avoid replication-lag-related 404s on freshly created links
+- Analytics endpoint includes a health check with automatic fallback to primary if the replica is unavailable, prioritizing availability over strict read/write separation during an outage
+
 ## Prerequisites
 
 - **Node.js** v24 or newer
