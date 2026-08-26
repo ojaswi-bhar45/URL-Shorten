@@ -67,23 +67,40 @@ flowchart LR
                     │         Route Handlers               │
                     │  /signup · /login · /health          │
                     │  /shorten · /:code (redirect)        │
-                    └───┬──────────────┬───────────────────┘
-                        │              │
-              ┌─────────▼──────┐  ┌────▼──────────────┐
-              │ Prisma + pg    │  │   Redis           │
-              │ PostgreSQL     │  │  URL cache        │
-              │ (source of     │  │  rate counters    │
-              │  truth)        │  └───────────────────┘
-              └────────────────┘
-                        │ publish click event
-              ┌─────────▼──────────────────────────┐
-              │  Kafka / Redpanda (link-clicked)   │
-              │  fire-and-forget, no DB write      │
-              └─────────┬──────────────────────────┘
+                    │  /analytics/:code                    │
+                    └───┬──────────┬──────────┬────────────┘
+                        │          │          │
+                        │          │          └────► Postgres REPLICA (analytics reads)
+                        │          │                    │ fallback if replica down
+                        │          │                    ▼
+                        │          │              Postgres PRIMARY
+                        │          │
+                        │    ┌─────▼───────────────┐
+                        │    │   Redis             │
+                        │    │  URL cache          │
+                        │    │  rate counters      │
+                        │    └─────────────────────┘
                         │
-              ┌─────────▼──────────────────────────┐
-              │  Click-event consumer (async)      │
-              └────────────────────────────────────┘
+                        │  writes: /shorten, /:code cache-miss, auth
+                        │  reads:  /:code redirect, /me/urls, /health
+                        ▼
+                    Postgres PRIMARY
+                        │
+                        │  publish click event (fire-and-forget)
+                        ▼
+                    ┌──────────────────────────────────────┐
+                    │  Kafka / Redpanda (link-clicked)     │
+                    └──────────────────┬───────────────────┘
+                                       │
+                    ┌──────────────────▼───────────────────┐
+                    │  Click-event Consumer (consumer.js)  │
+                    │  Validates shortCode → $transaction: │
+                    │    clickEvent.create + clickCount++  │
+                    └──────────────────┬───────────────────┘
+                                       │  writes
+                                       ▼
+                              Postgres PRIMARY
+                           (click_events + urls.clickCount)
 ```
 
 ## 4. Request Lifecycle
@@ -126,17 +143,18 @@ analytics path.
 
 | Component                    | File                                | Responsibility                                        |
 | ---------------------------- | ----------------------------------- | ----------------------------------------------------- |
-| Entry point                  | `app.js`                            | Config load, middleware wiring, Redis connect, listen |
+| Entry point                  | `app.js`                            | Config load, middleware wiring, Redis/Kafka connect, listen |
 | Auth routes                  | `routes/auth.routes.js`             | Signup / login endpoints                              |
-| URL routes                   | `routes/url.routes.js`              | Health, shorten, redirect endpoints                   |
-| Auth middleware              | `middleware/auth.middleware.js`     | JWT verification → `req.userId`                       |
+| URL routes                   | `routes/url.routes.js`              | Health, shorten, redirect, /me/urls endpoints         |
+| Analytics routes             | `routes/analytics.routes.js`        | Click analytics (reads from replica, falls back to primary) |
+| Auth middleware              | `middleware/auth.middleware.js`     | JWT verification (auth + optionalAuth)                |
 | Rate-limit middleware        | `middleware/rateLimit.middleware.js`| Redis-based fixed-window rate limiting                |
 | Validation schemas           | `schemas/*.js`                      | Zod schemas for auth and URL payloads                 |
-| Prisma client                | `lib/prisma.js`                     | PrismaClient with PostgreSQL driver adapter           |
-| Redis client                 | `config/redis.js`                   | Redis connection from environment variables           |
+| Prisma clients               | `db.js`                             | Primary + replica PrismaClient with pg driver adapter |
+| Redis client                 | `redis.js`                          | Redis connection from environment variables           |
 | Kafka client / producer      | `kafka.js`                          | Kafka connection, producer for `link-clicked`        |
 | Click-event consumer         | `consumer.js`                       | Inserts `click_events` row + increments `clickCount` |
-| Serialization helper         | `utils/serialize.js`                | BigInt-safe JSON serialization                        |
+| Frontend                     | `public/index.html`                 | Vanilla JS UI — shorten, auth, analytics checker      |
 | Prisma schema / migrations   | `prisma/`                           | Data model + SQL migration history                    |
 
 ## 6. Data Model
@@ -240,27 +258,30 @@ erDiagram
 ```
 url-shorten-b/
 ├── app.js                       # Entry point & middleware wiring
+├── db.js                        # Primary + replica Prisma clients (pg adapter)
+├── redis.js                     # Redis client from environment variables
+├── kafka.js                     # Kafka producer — connect, send, reconnect logic
+├── consumer.js                  # Standalone consumer: clickEvent insert + clickCount write-back
 ├── prisma.config.ts             # Prisma CLI configuration
 ├── prisma/
-│   ├── schema.prisma            # Data model
+│   ├── schema.prisma            # Data model: User, Url, ClickEvent
 │   └── migrations/              # SQL migration history
 ├── routes/
 │   ├── auth.routes.js           # /signup, /login
-│   └── url.routes.js            # /health, /shorten, /:code
+│   ├── url.routes.js            # /health, /shorten, /:code, /me/urls
+│   └── analytics.routes.js      # /analytics/:code
 ├── middleware/
-│   ├── auth.middleware.js       # JWT verification
+│   ├── auth.middleware.js       # JWT verification (auth + optionalAuth)
 │   └── rateLimit.middleware.js  # Redis fixed-window limiter
 ├── schemas/
 │   ├── auth.schema.js           # Zod: signup / login
 │   └── url.schema.js            # Zod: shorten
-├── config/
-│   └── redis.js                 # Redis client
-├── lib/
-│   └── prisma.js                # Prisma client (pg adapter)
-├── utils/
-│   └── serialize.js             # BigInt-safe serialization
-├── kafka.js                     # Kafka client + producer
-├── consumer.js                  # Standalone consumer: ClickEvent insert + clickCount write-back
+├── public/
+│   └── index.html               # Vanilla JS frontend — shorten, auth, analytics checker
+├── primary-init/                # Docker entrypoint scripts for Postgres primary
+├── replica-init/                # Bootstrap script for Postgres replica (pg_basebackup)
+├── docker-compose.yml           # Redpanda + Postgres primary/replica setup
+├── .env.example                 # Environment variable template
 └── generated/prisma/            # Generated Prisma client (gitignored)
 ```
 

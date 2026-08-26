@@ -39,36 +39,23 @@ A backend system demonstrating core system-design concepts: caching, rate limiti
 ## Architecture
 
 ```
-                    Client / Browser
-                         │ HTTP
-                         ▼
-                 Express Server (app.js)
-                   │           │
-          ┌────────▼──┐   ┌───▼──────────┐
-          │ Auth (JWT) │   │ Rate Limiter  │
-          │ Middleware  │   │ (Redis INCR)  │
-          └────────┬──┘   └───┬──────────┘
-                   │           │
-                   ▼           ▼
-              Route Handlers
-              │           │
-    ┌─────────▼──┐   ┌────▼────────────┐
-    │ Prisma     │   │   Redis          │
-    │ PostgreSQL │   │  (cache + rates) │
-    └────────────┘   └──────────────────┘
-              │
-              │ publish click event
-              ▼
-    Kafka / Redpanda (link-clicked)
-              │
-              ▼
-    Click-event Consumer (consumer.js)
-              │
-              ▼
-    Postgres (click_events + clickCount)
+Client
+  │
+  ▼
+Express API
+  ├──► Redis (cache)
+  ├──► Postgres PRIMARY (writes, redirect reads)
+  ├──► Postgres REPLICA (analytics reads, w/ fallback to PRIMARY)
+  └──► Kafka (link-clicked topic)
+                │
+                ▼
+        Consumer Service
+                │
+                ▼
+        Postgres PRIMARY (click_events, clickCount)
 ```
 
-Redirects are served from Redis (with Postgres as the fallback source of truth); every click is published to Kafka and written to analytics by the consumer asynchronously. The redirect path **never writes to Postgres**, keeping it fast and decoupled from analytics writes.
+Redirects read from Postgres PRIMARY to avoid replication-lag 404s on freshly created links. Analytics reads from the streaming REPLICA, with automatic fallback to PRIMARY if the replica is unavailable. The consumer writes analytics (click_events + clickCount increment) to PRIMARY via a transaction. The redirect path **never writes to Postgres** — all click data flows through Kafka and is processed asynchronously by the consumer, keeping the latency-sensitive redirect path fully decoupled from analytics writes.
 
 See [architecture.md](./architecture.md) for the full system design document with Mermaid diagrams.
 
