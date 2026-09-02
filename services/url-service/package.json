@@ -1,0 +1,27 @@
+{
+  "name": "url-service",
+  "version": "2.0.0",
+  "description": "URL Shortener service — shorten, redirect, auth",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@url-shorten/shared": "*",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.11.0",
+    "nanoid": "^6.0.0",
+    "redis": "^6.1.0",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "analytics-service",
+  "version": "2.0.0",
+  "description": "Analytics service — click analytics endpoint + Kafka consumer",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "consumer": "node consumer.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@url-shorten/shared": "*",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}

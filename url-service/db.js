@@ -1,9 +1,0 @@
-const { Pool } = require("pg");
-const { PrismaClient } = require("../generated/prisma");
-const { PrismaPg } = require("@prisma/adapter-pg");
-
-const poolPrimary = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapterPrimary = new PrismaPg(poolPrimary);
-const prismaPrimary = new PrismaClient({ adapter: adapterPrimary });
-
-module.exports = { prismaPrimary };

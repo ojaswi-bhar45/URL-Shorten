@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>URL Shortener</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <h1>URL Shortener</h1>
+
+    <div id="shortenSection">
+      <button id="logoutBtn" class="logout-btn" style="display: none">Log Out</button>
+      <p>Paste a Long URL, below to get a short link.</p>
+      <input type="text" id="longUrl" placeholder="Enter long URL here" />
+      <button id="shortenBtn">Shorten URL</button>
+    </div>
+
+    <div id="authSection">
+      <h2 id="authTitle">Log In</h2>
+      <p class="hint">Optional — log in to keep a history of your links and view analytics.</p>
+      <input type="email" id="email" placeholder="Email" autocomplete="email" />
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
+      <button id="authBtn">Log In</button>
+      <button id="toggleBtn" class="toggle-btn">Need an account? Sign Up</button>
+    </div>
+
+    <div id="error"></div>
+
+    <div id="result">
+      <strong>Your short URL:</strong><br />
+      <a id="shortLink" href="#" target="_blank"></a><br /><br />
+      <button id="copyBtn">Copy to Clipboard</button>
+    </div>
+
+    <hr style="margin: 30px 0;" />
+
+    <h2>Check Analytics</h2>
+    <input type="text" id="codeInput" placeholder="Enter short code (e.g. QjY7qMi)" />
+    <button id="checkBtn">Check Stats</button>
+
+    <div id="statsResult" style="display:none; margin-top:15px; padding:15px; background:white; border-radius:6px;">
+      <p><strong>Total Clicks:</strong> <span id="totalClicks"></span></p>
+      <p><strong>Top Referrers:</strong></p>
+      <ul id="referrersList"></ul>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -4,10 +4,10 @@ A backend system demonstrating core system-design concepts: caching, rate limiti
 
 The monolith has been split into two **independently runnable services**:
 
-- **`url-service/`** — short URL creation, redirects, and auth (read-heavy hot path).
-- **`analytics-service/`** — click analytics endpoint and the Kafka click-event consumer (write-heavy ingestion + aggregation reads).
+- **`services/url-service/`** — short URL creation, redirects, and auth (read-heavy hot path).
+- **`services/analytics-service/`** — click analytics endpoint and the Kafka click-event consumer (write-heavy ingestion + aggregation reads).
 
-Each service has its own entry point, `package.json`, and dependencies. They share the Postgres schema (a single `Prisma` schema at the repo root) but own distinct data-access patterns and can scale independently.
+They share the Postgres schema (a single `Prisma` schema at the repo root) and a shared utilities package (`packages/shared/`) but own distinct data-access patterns and can scale independently.
 
 ## Features
 
@@ -73,6 +73,7 @@ See [architecture.md](./architecture.md) for the full system design document.
 | Auth | JWT + bcrypt | — | Stateless session tokens, password hashing |
 | Validation | Zod | 4.x | Request payload validation |
 | Code generation | nanoid | 6.x | Collision-free 7-char short codes |
+| Shared utilities | `@url-shorten/shared` | — | Kafka producer, Prisma client factory, logger |
 
 ## Data Model
 
@@ -140,14 +141,12 @@ The repo is an npm workspace. From the project root:
 npm install
 ```
 
-This installs dependencies for both `url-service` and `analytics-service` and hoists shared packages (e.g. `@prisma/client` used by the generated client).
-
-> To keep each service fully standalone instead, run `npm install` separately inside each service folder.
+This installs dependencies for all packages (`@url-shorten/shared`, `url-service`, `analytics-service`) and hoists shared packages.
 
 ### 2. Start Redpanda (Kafka-compatible) — optional
 
 ```bash
-docker compose up -d
+npm run docker:up
 ```
 
 This starts a single-node Redpanda broker on `localhost:9092`, plus Postgres primary (`5432`) and replica (`5433`). If you already have Kafka/Postgres running, skip this step and set the `*_URL` / `KAFKA_BROKER` values in `.env`.
@@ -155,36 +154,37 @@ This starts a single-node Redpanda broker on `localhost:9092`, plus Postgres pri
 ### 3. Generate the Prisma client
 
 ```bash
-npx prisma generate --schema=prisma/schema.prisma
+npm run prisma:generate
 ```
 
 This generates the shared Prisma client into `generated/prisma` (gitignored) used by both services.
 
 ### 4. Configure environment variables
 
-Copy each service's example to its own `.env`:
+Copy the root example to `.env`:
 
 ```bash
-cp url-service/.env.example url-service/.env
-cp analytics-service/.env.example analytics-service/.env
+cp .env.example .env
 ```
+
+Then edit `.env` with your actual credentials (database URL, JWT secret, Redis host/password, etc.).
 
 ### 5. Start the URL Service
 
 ```bash
-node url-service/app.js
+npm run dev:url
 ```
 
-Listens on port `3000` (configurable via `PORT` in `url-service/.env`).
+Listens on port `3000` (configurable via `PORT` in `.env`).
 
 ### 6. Start the Analytics Service (separate terminal)
 
 ```bash
-node analytics-service/app.js
-node analytics-service/consumer.js
+npm run dev:analytics
+npm run dev:consumer
 ```
 
-The Express app listens on port `3001` (configurable via `PORT` in `analytics-service/.env`) and serves `/analytics/:code`. The consumer connects to Kafka, subscribes to the `link-clicked` topic, and writes analytics rows to Postgres. It can be started/stopped independently — Kafka retains events until the consumer catches up.
+The Express app listens on port `3001` (configurable via `ANALYTICS_PORT` in `.env`) and serves `/analytics/:code`. The consumer connects to Kafka, subscribes to the `link-clicked` topic, and writes analytics rows to Postgres.
 
 ## API Reference
 
@@ -198,7 +198,7 @@ The Express app listens on port `3001` (configurable via `PORT` in `analytics-se
 | `POST` | `/shorten` | url | Optional Bearer | Yes (5/60s) | Create a short URL for `{ url }` | `201 { ...url }` or `200` (duplicate) |
 | `GET` | `/:code` | url | — | — | Redirect to the long URL | `302` redirect |
 | `GET` | `/me/urls` | url | Required Bearer | — | List authenticated user's URLs | `200 [{ ...url }, ...]` |
-| `GET` | `/analytics/:code` | analytics | — | — | Click analytics for a short code | `200 { shortCode, totalClicks, clickOverTime, topRefernces, recentClicks }` |
+| `GET` | `/analytics/:code` | analytics | — | — | Click analytics for a short code | `200 { shortCode, totalClicks, clickOverTime, topReferrers, recentClicks }` |
 
 > The `url-service` also exposes `GET /health` (primary connectivity) and serves the frontend at `/`.
 > The `analytics-service` exposes `GET /health` (replica connectivity).
@@ -236,41 +236,57 @@ curl http://localhost:3001/analytics/QjY7qMi
 
 ```
 URL-Shorten/
+├── package.json                    # Root workspaces + dev scripts
+├── .env.example                    # Consolidated env template
+├── docker-compose.yml              # Redpanda + Postgres primary/replica
+├── prisma.config.ts                # Prisma CLI configuration
 ├── prisma/
-│   ├── schema.prisma            # Shared data model (single source of truth)
-│   └── migrations/              # SQL migration history
-├── prisma.config.ts             # Prisma CLI configuration
-├── docker-compose.yml           # Redpanda + Postgres primary/replica setup
-├── primary-init/                # Docker entrypoint scripts for Postgres primary
-├── replica-init/                # Bootstrap script for Postgres replica (pg_basebackup)
-├── generated/prisma/            # Shared generated Prisma client (gitignored)
+│   ├── schema.prisma               # Shared data model (single source of truth)
+│   └── migrations/                 # SQL migration history
 │
-├── url-service/                 # URL Service (shorten, redirect, auth) — port 3000
-│   ├── app.js                   # Entry point — Express setup, Redis/Kafka connect
-│   ├── db.js                    # Prisma primary client (pg driver adapter)
-│   ├── redis.js                 # Redis client from environment variables
-│   ├── kafka.js                 # Kafka producer — connect, send, reconnect logic
-│   ├── routes/
-│   │   ├── url.routes.js        # /health, /shorten, /:code, /me/urls
-│   │   └── auth.routes.js       # /signup, /login
-│   ├── middleware/
-│   │   ├── auth.middleware.js   # JWT verification (auth + optionalAuth)
-│   │   └── rateLimit.middleware.js  # Redis fixed-window rate limiter
-│   ├── schemas/                 # Zod: signup/login + shorten validation
-│   ├── public/index.html        # Vanilla JS frontend — shorten, auth, analytics checker
-│   └── package.json
+├── docker/
+│   ├── primary-init/               # Docker entrypoint scripts for Postgres primary
+│   └── replica-init/               # Bootstrap script for Postgres replica
 │
-├── analytics-service/           # Analytics Service (analytics + consumer) — port 3001
-│   ├── app.js                   # Entry point — small Express app for /analytics
-│   ├── consumer.js              # Kafka consumer — clickEvent insert + clickCount write-back
-│   ├── db.js                    # Prisma primary + replica clients (pg driver adapter)
-│   ├── kafka.js                 # Kafka client for the consumer
-│   ├── routes/
-│   │   └── analytics.routes.js  # GET /analytics/:code (replica reads, fallback primary)
-│   └── package.json
+├── packages/
+│   └── shared/                     # Shared utilities package
+│       ├── kafka.js                # Single Kafka producer module
+│       ├── db.js                   # Prisma client factory
+│       ├── logger.js               # Centralized logging
+│       └── index.js                # Barrel re-export
 │
-├── docs/                        # Postman collection
-└── README.md
+├── services/
+│   ├── url-service/                # URL Service — port 3000
+│   │   ├── app.js                  # Entry point — Express setup, Redis/Kafka connect
+│   │   ├── config.js               # Centralized env config + validation
+│   │   ├── redis.js                # Redis client
+│   │   ├── routes/
+│   │   │   ├── auth.routes.js      # /signup, /login
+│   │   │   ├── url.routes.js       # /shorten, /:code, /me/urls
+│   │   │   └── health.routes.js    # /health
+│   │   ├── middleware/
+│   │   │   ├── auth.js             # JWT verification (auth + optionalAuth)
+│   │   │   └── rateLimit.js        # Redis fixed-window rate limiter
+│   │   ├── services/
+│   │   │   ├── auth.service.js     # Auth business logic
+│   │   │   └── url.service.js      # URL business logic
+│   │   ├── schemas/                # Zod validation schemas
+│   │   ├── public/                 # Frontend (index.html, style.css, app.js)
+│   │   └── package.json
+│   │
+│   └── analytics-service/          # Analytics Service — port 3001
+│       ├── app.js                  # Entry point — Express app for /analytics
+│       ├── config.js               # Centralized env config
+│       ├── consumer.js             # Kafka consumer process
+│       ├── routes/
+│       │   └── analytics.routes.js # GET /analytics/:code
+│       ├── services/
+│       │   ├── analytics.service.js # Analytics query logic
+│       │   └── consumer.service.js  # Click event processing
+│       └── package.json
+│
+├── generated/prisma/               # Shared generated Prisma client (gitignored)
+└── docs/                           # Postman collection
 ```
 
 ## Security Notes

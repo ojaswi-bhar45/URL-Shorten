@@ -1,0 +1,75 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 600px;
+  margin: 60px auto;
+  padding: 0 20px;
+  background: #f7f7f8;
+}
+h1 {
+  font-size: 1.6em;
+}
+input,
+button {
+  font-size: 1em;
+  padding: 10px;
+  margin-top: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  cursor: pointer;
+  margin-top: 12px;
+}
+button:hover {
+  background: #1d4ed8;
+}
+button:disabled {
+  background: #93b4f5;
+  cursor: not-allowed;
+}
+.toggle-btn {
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid #2563eb;
+  margin-top: 16px;
+}
+.toggle-btn:hover {
+  background: #eef2ff;
+}
+.logout-btn {
+  background: #dc2626;
+}
+.logout-btn:hover {
+  background: #b91c1c;
+}
+#authSection,
+#shortenSection {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+#result {
+  margin-top: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 6px;
+  display: none;
+}
+#result a {
+  color: #2563eb;
+  word-break: break-all;
+}
+#error {
+  color: #dc2626;
+  margin-top: 10px;
+  display: none;
+}
+.hint {
+  color: #6b7280;
+  font-size: 0.9em;
+  margin: 0 0 4px;
+}

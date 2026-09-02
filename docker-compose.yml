@@ -35,7 +35,7 @@ services:
       - "5432:5432"
     volumes:
       - primary_data:/var/lib/postgresql/data
-      - ./primary-init:/docker-entrypoint-initdb.d
+      - ./docker/primary-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d urlshortener"]
       interval: 5s
@@ -51,7 +51,7 @@ services:
       - "5433:5432"
     volumes:
       - replica_data:/var/lib/postgresql/data
-      - ./replica-init:/bootstrap:ro
+      - ./docker/replica-init:/bootstrap:ro
     command: ["bash", "/bootstrap/replica-init.sh"]
     depends_on:
       postgres-primary:

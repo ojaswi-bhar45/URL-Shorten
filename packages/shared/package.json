@@ -1,0 +1,13 @@
+{
+  "name": "@url-shorten/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities: Kafka producer, Prisma client factory, logger",
+  "main": "index.js",
+  "type": "commonjs",
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "pg": "^8.22.0"
+  }
+}
