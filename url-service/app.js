@@ -11,7 +11,6 @@ const cors = require("cors");
 const morgan = require("morgan");
 const urlRoutes = require("./routes/url.routes.js");
 const authRoutes = require("./routes/auth.routes.js");
-const analyticsRoutes = require("./routes/analytics.routes.js");
 const { redisClient } = require("./redis.js");
 const { connect } = require("./kafka.js");
 
@@ -32,7 +31,6 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/", authRoutes);
 
 app.use("/", urlRoutes);
-app.use("/", analyticsRoutes);
 
 let port = process.env.PORT || 3000;
 
