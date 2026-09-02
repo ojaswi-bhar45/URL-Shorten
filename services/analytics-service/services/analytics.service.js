@@ -1,20 +1,24 @@
-const { createPrismaPrimary, createPrismaReplica } = require("@url-shorten/shared");
-const logger = require("@url-shorten/shared/logger");
+import { Pool } from "pg";
+import { PrismaClient } from "../../generated/prisma/index.js";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prismaPrimary = createPrismaPrimary();
-const prismaReplica = createPrismaReplica();
+const poolPrimary = new Pool({ connectionString: process.env.DATABASE_URL });
+const prismaPrimary = new PrismaClient({ adapter: new PrismaPg(poolPrimary) });
+
+const poolReplica = new Pool({ connectionString: process.env.DATABASE_REPLICA_URL });
+const prismaReplica = new PrismaClient({ adapter: new PrismaPg(poolReplica) });
 
 async function getDb() {
   try {
     await prismaReplica.$queryRaw`SELECT 1`;
     return prismaReplica;
   } catch {
-    logger.warn("Replica unavailable, falling back to primary");
+    console.warn("Replica unavailable, falling back to primary");
     return prismaPrimary;
   }
 }
 
-async function getAnalytics(code) {
+export async function getAnalytics(code) {
   const db = await getDb();
 
   const url = await db.url.findUnique({ where: { shortCode: code } });
@@ -55,9 +59,3 @@ async function getAnalytics(code) {
     recentClicks,
   };
 }
-
-async function checkHealth() {
-  await prismaReplica.$queryRaw`SELECT 1`;
-}
-
-module.exports = { getAnalytics, checkHealth };

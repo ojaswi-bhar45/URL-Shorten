@@ -1,11 +1,13 @@
-const { createPrismaPrimary } = require("@url-shorten/shared");
-const logger = require("@url-shorten/shared/logger");
+import { Pool } from "pg";
+import { PrismaClient } from "../../generated/prisma/index.js";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = createPrismaPrimary();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-async function processClickEvent(event) {
+export async function processClickEvent(event) {
   if (!event.shortCode) {
-    logger.warn("Skipping malformed event (missing shortCode)");
+    console.warn("Skipping malformed event (missing shortCode)");
     return;
   }
 
@@ -15,7 +17,7 @@ async function processClickEvent(event) {
   });
 
   if (!urlExists) {
-    logger.warn(`Skipping event for unknown shortCode: ${event.shortCode}`);
+    console.warn(`Skipping event for unknown shortCode: ${event.shortCode}`);
     return;
   }
 
@@ -35,11 +37,9 @@ async function processClickEvent(event) {
     }),
   ]);
 
-  logger.info(`Processed click for ${event.shortCode}`);
+  console.log(`Processed click for ${event.shortCode}`);
 }
 
-async function disconnect() {
+export async function disconnect() {
   await prisma.$disconnect();
 }
-
-module.exports = { processClickEvent, disconnect };

@@ -1,4 +1,4 @@
-const ANALYTICS_BASE = window.ANALYTICS_URL || "http://localhost:3001";
+const ANALYTICS_BASE = window.ANALYTICS_URL || "http://localhost:4000";
 
 let mode = "login";
 let token = localStorage.getItem("token");

@@ -2,6 +2,7 @@
   "name": "analytics-service",
   "version": "2.0.0",
   "description": "Analytics service — click analytics endpoint + Kafka consumer",
+  "type": "module",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
@@ -11,10 +12,12 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@url-shorten/shared": "*",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.22.0"
   }
 }

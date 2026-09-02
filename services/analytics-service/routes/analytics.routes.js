@@ -1,5 +1,5 @@
-const { Router } = require("express");
-const { getAnalytics } = require("../services/analytics.service");
+import { Router } from "express";
+import { getAnalytics } from "../services/analytics.service.js";
 
 const router = Router();
 
@@ -15,8 +15,9 @@ router.get("/analytics/:code", async (req, res) => {
 
     res.status(200).json(data);
   } catch (err) {
+    console.error("Analytics error:", err);
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 });
 
-module.exports = router;
+export default router;
