@@ -17,6 +17,8 @@ BigInt.prototype.toJSON = function () {
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const corsOptions = config.corsOrigin
   ? { origin: config.corsOrigin.split(",").map((o) => o.trim()) }
   : {};

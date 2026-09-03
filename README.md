@@ -24,38 +24,43 @@ They share the Postgres schema (a single `Prisma` schema at the repo root) and a
 
 ## Service Boundaries
 
-| Concern | `url-service` | `analytics-service` |
-|---|---|---|
-| `POST /shorten` | ✅ | |
-| `GET /:code` (redirect) | ✅ | |
-| `GET /me/urls` | ✅ | |
-| `POST /signup`, `POST /login` | ✅ | |
-| Redis (cache + rate limit) | ✅ | |
-| Kafka producer (click events) | ✅ | |
-| `GET /analytics/:code` | | ✅ |
-| Kafka consumer (click ingestion) | | ✅ |
-| Postgres primary writes | ✅ | ✅ (consumer writes) |
-| Postgres primary reads (redirects) | ✅ | |
-| Postgres replica reads (analytics) | | ✅ |
+| Concern | `gateway` | `url-service` | `analytics-service` |
+|---|---|---|---|
+| Public entry point (port 3000) | ✅ | | |
+| `POST /shorten` | routes | ✅ | |
+| `GET /:code` (redirect) | routes | ✅ | |
+| `GET /me/urls` | routes | ✅ | |
+| `POST /signup`, `POST /login` | routes | ✅ | |
+| Redis (cache + rate limit) | | ✅ | |
+| Kafka producer (click events) | | ✅ | |
+| `GET /analytics/:code` | routes | | ✅ |
+| Kafka consumer (click ingestion) | | | ✅ |
+| Postgres primary writes | | ✅ | ✅ (consumer writes) |
+| Postgres primary reads (redirects) | | ✅ | |
+| Postgres replica reads (analytics) | | | ✅ |
 
-Each service owns its own data-access patterns and scales independently: **URL Service** is read-heavy on the hot redirect path; **Analytics Service** is write-heavy on ingestion (via the consumer) and does aggregation-heavy reads.
+Each service owns its own data-access patterns and scales independently: **URL Service** is read-heavy on the hot redirect path; **Analytics Service** is write-heavy on ingestion (via the consumer) and does aggregation-heavy reads. The **Gateway** is the single public-facing entry point that routes requests to the right service by path.
 
 ## Architecture
 
 ```
 Client
-  │ HTTP
-  ├──────► url-service (Express, port 3000)
-  │           ├── Redis (URL cache + rate limits)
-  │           ├── Postgres PRIMARY (writes, redirect reads)
-  │           └── Kafka producer (link-clicked)  ──┐
-  │                                                │  click events
-  ├──────► analytics-service (Express, port 3001)  │
-  │           ├── /analytics/:code                 │
-  │           │     └── Postgres REPLICA (reads, fallback PRIMARY)
-  │           └── consumer.js ◄────────────────────┘
-  │                 └── Postgres PRIMARY (click_events, clickCount)
+  │ HTTP (port 3000 only)
+  ▼
+gateway (Express, port 3000)  ── routes by path ──┐
+  │                                               │
+  ├─ /analytics  ──────────────────────────┐      │
+  ├─ /signup /login /me /shorten /:code   │  /analytics
+  │   │                                    ▼
+  │   ▼                              analytics-service (Express, port 4000)
+  │ url-service (Express, port 3001)      ├─ /analytics/:code
+  │   ├── Redis (URL cache + rate limits) │     └── Postgres REPLICA (reads, fallback PRIMARY)
+  │   ├── Postgres PRIMARY (writes, redirect reads)   └── consumer.js ◄──────┐
+  │   └── Kafka producer (link-clicked)  ─────────────────────────────────────┘
+  │                                              └── Postgres PRIMARY (click_events, clickCount)
 ```
+
+Clients only ever talk to the gateway on port `3000`. The gateway silently proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short-code redirects like `/QjY7qMi`, and the frontend static assets) to the url-service (`3001`).
 
 Redirects read from Postgres PRIMARY to avoid replication-lag 404s on freshly created links. Analytics reads from the streaming REPLICA, with automatic fallback to PRIMARY if the replica is unavailable. The consumer writes analytics (click_events + clickCount increment) to PRIMARY via a transaction. The redirect path **never writes to Postgres** — all click data flows through Kafka and is processed asynchronously by the consumer.
 
@@ -169,26 +174,34 @@ cp .env.example .env
 
 Then edit `.env` with your actual credentials (database URL, JWT secret, Redis host/password, etc.).
 
-### 5. Start the URL Service
+### 5. Install the gateway dependencies
+
+The gateway is a standalone package (not part of the npm workspaces). Install its deps:
 
 ```bash
-npm run dev:url
+cd gateway
+npm install
+cd ..
 ```
 
-Listens on port `3000` (configurable via `PORT` in `.env`).
+### 6. Start the services
 
-### 6. Start the Analytics Service (separate terminal)
+Start the gateway (public entry point, port `3000`), the url-service (port `3001`), the analytics-service (port `4000`), and the Kafka consumer. Use separate terminals from the project root:
 
 ```bash
-npm run dev:analytics
-npm run dev:consumer
+npm run dev:gateway     # port 3000 — the one clients talk to
+npm run dev:url         # port 3001 (configurable via PORT in .env)
+npm run dev:analytics   # port 4000
+npm run dev:consumer    # background analytics processor
 ```
 
-The Express app listens on port `3001` (configurable via `ANALYTICS_PORT` in `.env`) and serves `/analytics/:code`. The consumer connects to Kafka, subscribes to the `link-clicked` topic, and writes analytics rows to Postgres.
+> **Routing note:** clients only ever hit the gateway (`3000`). It proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short codes, frontend assets) to the url-service (`3001`). The url-service reads env from the repo-root `.env` — change `PORT` there if you need a different port.
 
 ## API Reference
 
 ### Endpoints
+
+All endpoints below are accessed through the **gateway** on port `3000`.
 
 | Method | Path | Service | Auth | Rate Limited | Description | Response |
 |---|---|---|---|---|---|---|
@@ -229,7 +242,7 @@ curl -X POST http://localhost:3000/shorten \
 ### Example: Check Analytics
 
 ```bash
-curl http://localhost:3001/analytics/QjY7qMi
+curl http://localhost:3000/analytics/QjY7qMi
 ```
 
 ## Project Structure
@@ -256,7 +269,7 @@ URL-Shorten/
 │       └── index.js                # Barrel re-export
 │
 ├── services/
-│   ├── url-service/                # URL Service — port 3000
+│   ├── url-service/                # URL Service — port 3001
 │   │   ├── app.js                  # Entry point — Express setup, Redis/Kafka connect
 │   │   ├── config.js               # Centralized env config + validation
 │   │   ├── redis.js                # Redis client
@@ -274,7 +287,7 @@ URL-Shorten/
 │   │   ├── public/                 # Frontend (index.html, style.css, app.js)
 │   │   └── package.json
 │   │
-│   └── analytics-service/          # Analytics Service — port 3001
+│   └── analytics-service/          # Analytics Service — port 4000
 │       ├── app.js                  # Entry point — Express app for /analytics
 │       ├── config.js               # Centralized env config
 │       ├── consumer.js             # Kafka consumer process
@@ -284,6 +297,11 @@ URL-Shorten/
 │       │   ├── analytics.service.js # Analytics query logic
 │       │   └── consumer.service.js  # Click event processing
 │       └── package.json
+│
+├── gateway/                        # API Gateway — public entry point, port 3000
+│   ├── app.js                      # Proxy routes to url-service + analytics-service
+│   ├── package.json                # Express + http-proxy-middleware
+│   └── .env                        # PORT + downstream service URLs
 │
 ├── generated/prisma/               # Shared generated Prisma client (gitignored)
 └── docs/                           # Postman collection
