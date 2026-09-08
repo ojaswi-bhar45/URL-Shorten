@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "URL Shortener API",
-    "description": "URL Shortener & Analytics Platform API collection. Run requests in order against a fresh database. Note: POST /shorten is rate limited to 5 requests per 60 seconds per user - wait 60 seconds between full collection runs. Click analytics require the Kafka consumer (consumer.js) to be running.",
+    "description": "URL Shortener & Analytics Platform API collection. Run requests in order against a fresh database. All requests go through the API gateway (port 3000), which routes to url-service and analytics-service. Note: POST /shorten is rate limited to 5 requests per 60 seconds per user or IP address - wait 60 seconds between full collection runs. Auth is optional on /shorten (anonymous shortening is supported); every request counts toward the limit, including validation failures. Click analytics require the Kafka consumer (consumer.js) to be running.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -599,25 +599,28 @@
           "listen": "test",
           "script": {
             "type": "text/javascript",
-            "exec": [
-              "pm.test('Status is 200 or 201', () => {",
-              "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
-              "});",
-              "",
-              "pm.test('Response has required fields', () => {",
-              "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('id');",
-              "  pm.expect(body).to.have.property('shortCode');",
-              "  pm.expect(body).to.have.property('longUrl', 'https://example.com');",
-              "  pm.expect(body).to.have.property('createdAt');",
-              "});",
-              "",
-              "pm.test('Short code is 7 characters', () => {",
-              "  const body = pm.response.json();",
-              "  pm.expect(body.shortCode).to.have.lengthOf(7);",
-              "});",
-              "",
-              "pm.collectionVariables.set('shortCode', pm.response.json().shortCode);"
+"exec": [
+                "pm.test('Status is 201', () => {",
+                "  pm.response.to.have.status(201);",
+                "});",
+                "",
+                "pm.test('Response has required fields', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('id');",
+                "  pm.expect(body).to.have.property('shortCode');",
+                "  pm.expect(body).to.have.property('longUrl', 'https://example.com');",
+                "  pm.expect(body).to.have.property('createdAt');",
+                "  pm.expect(body).to.have.property('clickCount', '0');",
+                "  pm.expect(body).to.have.property('expiry', null);",
+                "  pm.expect(body).to.have.property('userId').and.to.be.a('string');",
+                "});",
+                "",
+                "pm.test('Short code is 7 characters', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body.shortCode).to.have.lengthOf(7);",
+                "});",
+                "",
+                "pm.collectionVariables.set('shortCode', pm.response.json().shortCode);"
             ]
           }
         }
@@ -652,23 +655,25 @@
           "listen": "test",
           "script": {
             "type": "text/javascript",
-            "exec": [
-              "pm.test('Status is 200', () => {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "",
-              "pm.test('Returns existing short code', () => {",
-              "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('shortCode');",
-              "  pm.expect(body.shortCode).to.equal(pm.collectionVariables.get('shortCode'));",
-              "});"
+"exec": [
+                "pm.test('Status is 201', () => {",
+                "  pm.response.to.have.status(201);",
+                "});",
+                "",
+                "pm.test('Returns existing short code', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('shortCode');",
+                "  pm.expect(body.shortCode).to.equal(pm.collectionVariables.get('shortCode'));",
+                "  pm.expect(body).to.have.property('longUrl', 'https://example.com');",
+                "  pm.expect(body).to.have.property('clickCount', '0');",
+                "});"
             ]
           }
         }
       ]
     },
     {
-      "name": "Shorten URL (unauthorized)",
+      "name": "Shorten URL (anonymous)",
       "request": {
         "method": "POST",
         "url": {
@@ -693,14 +698,58 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status is 401', () => {",
-              "  pm.response.to.have.status(401);",
+              "pm.test('Status is 201', () => {",
+              "  pm.response.to.have.status(201);",
               "});",
               "",
-              "pm.test('Error is missing or invalid authorization header', () => {",
+              "pm.test('Shorten succeeds anonymously (userId is null)', () => {",
               "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('error');",
-              "  pm.expect(body.error).to.equal('Missing or invalid authorization header');",
+              "  pm.expect(body).to.have.property('shortCode');",
+              "  pm.expect(body).to.have.property('userId', null);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shorten URL (invalid token ignored)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/shorten",
+          "host": ["{{baseUrl}}"],
+          "path": ["shorten"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer invalid.token"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://example.com\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 201', () => {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Invalid token is ignored and shorten falls back to anonymous', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('shortCode');",
+              "  pm.expect(body).to.have.property('userId', null);",
               "});"
             ]
           }
@@ -950,11 +999,18 @@
               "  pm.expect(body).to.be.an('array');",
               "});",
               "",
-              "pm.test('Array contains the created short code', () => {",
-              "  const body = pm.response.json();",
-              "  const codes = body.map((u) => u.shortCode);",
-              "  pm.expect(codes).to.include(pm.collectionVariables.get('shortCode'));",
-              "});"
+"pm.test('Array contains the created short code', () => {",
+                "  const body = pm.response.json();",
+                "  const codes = body.map((u) => u.shortCode);",
+                "  pm.expect(codes).to.include(pm.collectionVariables.get('shortCode'));",
+                "});",
+                "",
+                "pm.test('URL records expose clickCount and expiry', () => {",
+                "  const body = pm.response.json();",
+                "  const created = body.find((u) => u.shortCode === pm.collectionVariables.get('shortCode'));",
+                "  pm.expect(created).to.have.property('clickCount', '0');",
+                "  pm.expect(created).to.have.property('expiry', null);",
+                "});"
             ]
           }
         }
@@ -1045,12 +1101,24 @@
               "  pm.response.to.have.status(200);",
               "});",
               "",
-              "pm.test('Response has shortCode, totalClicks, recentClicks', () => {",
-              "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('shortCode', pm.collectionVariables.get('shortCode'));",
-              "  pm.expect(body).to.have.property('totalClicks').and.to.be.a('string');",
-              "  pm.expect(body).to.have.property('recentClicks').and.to.be.an('array');",
-              "});"
+"pm.test('Response has shortCode, totalClicks, recentClicks', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('shortCode', pm.collectionVariables.get('shortCode'));",
+                "  pm.expect(body).to.have.property('totalClicks').and.to.be.a('string');",
+                "  pm.expect(body).to.have.property('recentClicks').and.to.be.an('array');",
+                "});",
+                "",
+                "pm.test('Response includes clickOverTime and topReferrers', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body).to.have.property('clickOverTime').and.to.be.an('array');",
+                "  pm.expect(body).to.have.property('topReferrers').and.to.be.an('array');",
+                "});",
+                "",
+                "pm.test('Recent clicks reference the short code', () => {",
+                "  const body = pm.response.json();",
+                "  const codes = body.recentClicks.map((c) => c.shortCode);",
+                "  pm.expect(codes).to.include(pm.collectionVariables.get('shortCode'));",
+                "});"
             ]
           }
         }

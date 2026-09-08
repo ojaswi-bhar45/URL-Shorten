@@ -1,7 +1,12 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createProxyMiddleware } from "http-proxy-middleware";
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: path.join(__dirname, ".env") });
 
 const app = express();
 
@@ -15,12 +20,24 @@ app.use(cors(corsOptions));
 const URL_SERVICE = process.env.URL_SERVICE_URL || "http://localhost:3001";
 const ANALYTICS_SERVICE = process.env.ANALYTICS_SERVICE_URL || "http://localhost:4000";
 
+function missingService(name) {
+  return (err, req, res) => {
+    console.error(`${name} proxy error:`, err.message);
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    res.status(503).json({ error: `${name} is currently unavailable` });
+  };
+}
+
 // Route analytics requests to Analytics Service (port 4000)
 app.use(
   "/analytics",
   createProxyMiddleware({
     target: ANALYTICS_SERVICE,
     changeOrigin: true,
+    on: { error: missingService("Analytics Service") },
   })
 );
 
@@ -30,6 +47,7 @@ app.use(
   createProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    on: { error: missingService("URL Service") },
   })
 );
 
@@ -39,6 +57,7 @@ app.use(
   createProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    on: { error: missingService("URL Service") },
   })
 );
 
@@ -50,6 +69,7 @@ app.use(
   createProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    on: { error: missingService("URL Service") },
   })
 );
 

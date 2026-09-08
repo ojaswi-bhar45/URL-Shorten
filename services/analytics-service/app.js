@@ -1,6 +1,11 @@
 import express from "express";
-import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
 import analyticsRoutes from "./routes/analytics.routes.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: path.join(__dirname, ".env") });
 
 const app = express();
 app.use(express.json());
