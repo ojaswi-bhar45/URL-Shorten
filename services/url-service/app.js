@@ -31,8 +31,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", authRoutes);
-app.use("/", urlRoutes);
 app.use("/", healthRoutes);
+app.use("/", urlRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });

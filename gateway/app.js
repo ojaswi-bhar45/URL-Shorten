@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createProxyMiddleware } from "http-proxy-middleware";
+import { legacyCreateProxyMiddleware } from "http-proxy-middleware";
 import { config as loadDotenv } from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -10,7 +10,8 @@ loadDotenv({ path: path.join(__dirname, ".env") });
 
 const app = express();
 
-app.use(express.json());
+// NOTE: no body parsers here. The gateway must forward request bodies
+// (POST /signup, /login, /shorten) to downstream services untouched.
 
 const corsOptions = process.env.CORS_ORIGIN
   ? { origin: process.env.CORS_ORIGIN.split(",").map((o) => o.trim()) }
@@ -31,10 +32,20 @@ function missingService(name) {
   };
 }
 
+// Health check — proxied to URL Service
+app.use(
+  "/health",
+  legacyCreateProxyMiddleware({
+    target: URL_SERVICE,
+    changeOrigin: true,
+    on: { error: missingService("URL Service") },
+  })
+);
+
 // Route analytics requests to Analytics Service (port 4000)
 app.use(
   "/analytics",
-  createProxyMiddleware({
+  legacyCreateProxyMiddleware({
     target: ANALYTICS_SERVICE,
     changeOrigin: true,
     on: { error: missingService("Analytics Service") },
@@ -44,7 +55,7 @@ app.use(
 // Route auth requests to URL Service (port 3001)
 app.use(
   ["/signup", "/login", "/me"],
-  createProxyMiddleware({
+  legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
     on: { error: missingService("URL Service") },
@@ -54,7 +65,7 @@ app.use(
 // Route URL shortening requests to URL Service (port 3001)
 app.use(
   ["/shorten"],
-  createProxyMiddleware({
+  legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
     on: { error: missingService("URL Service") },
@@ -66,7 +77,7 @@ app.use(
 // AFTER the specific routes above so it doesn't swallow them.
 app.use(
   "/",
-  createProxyMiddleware({
+  legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
     on: { error: missingService("URL Service") },

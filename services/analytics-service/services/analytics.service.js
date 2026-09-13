@@ -1,6 +1,12 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
 import { Pool } from "pg";
 import { PrismaClient } from "../../../generated/prisma/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: path.join(__dirname, "../.env") });
 
 const poolPrimary = new Pool({ connectionString: process.env.DATABASE_URL });
 const prismaPrimary = new PrismaClient({ adapter: new PrismaPg(poolPrimary) });
@@ -15,6 +21,16 @@ async function getDb() {
   } catch {
     console.warn("Replica unavailable, falling back to primary");
     return prismaPrimary;
+  }
+}
+
+export async function checkHealth() {
+  try {
+    await prismaReplica.$queryRaw`SELECT 1`;
+    return { message: "Database connected", source: "replica" };
+  } catch {
+    await prismaPrimary.$queryRaw`SELECT 1`;
+    return { message: "Database connected (fallback to primary)", source: "primary" };
   }
 }
 

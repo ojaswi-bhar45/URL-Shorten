@@ -1,7 +1,16 @@
 import { Router } from "express";
-import { getAnalytics } from "../services/analytics.service.js";
+import { getAnalytics, checkHealth } from "../services/analytics.service.js";
 
 const router = Router();
+
+router.get("/health", async (req, res) => {
+  try {
+    const data = await checkHealth();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Database connection failed" });
+  }
+});
 
 router.get("/analytics/:code", async (req, res) => {
   const { code } = req.params;
