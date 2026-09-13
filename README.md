@@ -2,10 +2,14 @@
 
 A backend system demonstrating core system-design concepts: caching, rate limiting, async event processing, and horizontal scaling readiness.
 
-The monolith has been split into two **independently runnable services**:
+The monolith has been split into **independently runnable microservices**:
 
-- **`services/url-service/`** — short URL creation, redirects, and auth (read-heavy hot path).
-- **`services/analytics-service/`** — click analytics endpoint and the Kafka click-event consumer (write-heavy ingestion + aggregation reads).
+- **`gateway/`** — single public entry point (port 3000), routes requests to internal services
+- **`services/url-service/`** — URL shortening, redirects, auth, Redis caching/rate limiting (read-heavy hot path)
+- **`services/analytics-service/`** — click analytics endpoint (aggregation reads from the replica)
+- **`consumer`** (run from `analytics-service`) — Kafka click-event consumer (write-heavy ingestion)
+
+Clients only ever talk to the Gateway; internal services are not directly exposed.
 
 They share the Postgres schema (a single `Prisma` schema at the repo root) and a shared utilities package (`packages/shared/`) but own distinct data-access patterns and can scale independently.
 
@@ -41,26 +45,26 @@ They share the Postgres schema (a single `Prisma` schema at the repo root) and a
 
 Each service owns its own data-access patterns and scales independently: **URL Service** is read-heavy on the hot redirect path; **Analytics Service** is write-heavy on ingestion (via the consumer) and does aggregation-heavy reads. The **Gateway** is the single public-facing entry point that routes requests to the right service by path.
 
-## Architecture
+## Architecture (Microservices)
+
+- **API Gateway** (port 3000) — single public entry point, routes requests to internal services
+- **URL Service** (port 3001) — URL shortening, redirects, auth, Redis caching/rate limiting
+- **Analytics Service** (port 4000) — analytics queries (reads from replica)
+- **Consumer** — separate process, consumes Kafka click events, writes to primary
+
+Clients only ever talk to the Gateway; internal services are not directly exposed.
 
 ```
 Client
-  │ HTTP (port 3000 only)
+  │
   ▼
-gateway (Express, port 3000)  ── routes by path ──┐
-  │                                               │
-  ├─ /analytics  ──────────────────────────┐      │
-  ├─ /signup /login /me /shorten /:code   │  /analytics
-  │   │                                    ▼
-  │   ▼                              analytics-service (Express, port 4000)
-  │ url-service (Express, port 3001)      ├─ /analytics/:code
-  │   ├── Redis (URL cache + rate limits) │     └── Postgres REPLICA (reads, fallback PRIMARY)
-  │   ├── Postgres PRIMARY (writes, redirect reads)   └── consumer.js ◄──────┐
-  │   └── Kafka producer (link-clicked)  ─────────────────────────────────────┘
-  │                                              └── Postgres PRIMARY (click_events, clickCount)
+API Gateway (3000)
+  ├──► URL Service (3001) ──► Redis, Postgres Primary, Kafka (producer)
+  └──► Analytics Service (4000) ──► Postgres Replica (w/ fallback to primary)
+                                          ▲
+                                          │
+                                  Consumer ──► Kafka (consumer), Postgres Primary
 ```
-
-Clients only ever talk to the gateway on port `3000`. The gateway silently proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short-code redirects like `/QjY7qMi`, and the frontend static assets) to the url-service (`3001`).
 
 Redirects read from Postgres PRIMARY to avoid replication-lag 404s on freshly created links. Analytics reads from the streaming REPLICA, with automatic fallback to PRIMARY if the replica is unavailable. The consumer writes analytics (click_events + clickCount increment) to PRIMARY via a transaction. The redirect path **never writes to Postgres** — all click data flows through Kafka and is processed asynchronously by the consumer.
 
