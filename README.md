@@ -229,6 +229,8 @@ All endpoints below are accessed through the **gateway** on port `3000`.
 | `404` | Short code not found |
 | `410` | Link has expired |
 | `429` | Rate limit exceeded (response includes retry wait in seconds) |
+| `503` | Gateway: downstream service is unavailable |
+| `504` | Gateway: downstream service timed out (10s) |
 
 ### Example: Create a Short URL
 
@@ -334,6 +336,22 @@ URL-Shorten/
 
 - **Rate limiter fails open** — if Redis is down, requests pass through unthrottled rather than taking the service down
 - **Click events are fire-and-forget** — if Kafka is unreachable at publish time, the click event is dropped (redirect still succeeds). Failed consumer processing is logged, not retried (dead-letter queue on the roadmap)
+
+## Graceful Degradation
+
+The platform is designed to degrade gracefully rather than crash when infrastructure fails.
+
+| Failure | Behavior | Layer |
+|---|---|---|
+| Analytics Service down | Gateway returns `503 {"error":"Analytics service is currently unavailable"}` | Gateway proxy error handler |
+| URL Service down | Gateway returns `503 {"error":"URL Service is currently unavailable"}` | Same handler (covers `/shorten`, `/:code`, auth, `/health`, frontend) |
+| Downstream hung/unresponsive | Gateway returns `504 Gateway Timeout` after 10s | `proxyTimeout` aborts the stalled proxy request |
+| Redis down | Rate limiter fails open — requests pass through unthrottled | `rateLimit.js` catches the Redis error and calls `next()` |
+| Kafka broker down | Click events silently dropped; redirect succeeds with `302` | `sendToKafka` logs and drops the event; user sees normal redirect |
+| Consumer crashed | Kafka retains messages; consumer resumes on restart | Consumer group (`analytics-consumer-group`) picks up from last offset |
+| Postgres replica down | Analytics queries fall back to primary | `analytics.service.js` health-checks replica; falls back to primary |
+
+**Key design principle:** the redirect hot path is protected at every layer — Redis cache-aside, Postgres-primary reads, Kafka fire-and-forget — so a slow or failed analytics pipeline never blocks the redirect that users are waiting for.
 
 ## Roadmap
 
