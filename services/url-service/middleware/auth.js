@@ -27,7 +27,11 @@ function optionalAuth(req, res, next) {
       const decoded = jwt.verify(token, config.jwtSecret);
       req.userId = decoded.userId;
     } catch (err) {
-      logger.warn("Optional JWT verification failed, continuing anonymously:", err.message);
+      // Fail closed: an invalid/expired token must not be silently downgraded
+      // to an anonymous identity — that would let stale tokens create URLs
+      // outside the user's account.
+      logger.warn("Optional JWT verification failed:", err.message);
+      return res.status(401).json({ error: "Invalid or expired token" });
     }
   }
   next();

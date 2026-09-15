@@ -160,8 +160,15 @@ checkBtn.addEventListener("click", async () => {
   let code = codeInput.value.trim();
   if (!code) return;
 
+  if (!token) {
+    alert("Please log in to view analytics.");
+    return;
+  }
+
   try {
-    let res = await fetch(`${ANALYTICS_BASE}/analytics/${code}`);
+    let res = await fetch(`${ANALYTICS_BASE}/analytics/${code}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     let data = await res.json();
 
     if (!res.ok) {

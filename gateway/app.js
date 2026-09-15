@@ -1,14 +1,18 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { legacyCreateProxyMiddleware } from "http-proxy-middleware";
 import { config as loadDotenv } from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: path.join(__dirname, ".env") });
+// Single source of truth for config: the repo-root .env
+loadDotenv({ path: path.join(__dirname, "..", ".env") });
 
 const app = express();
+app.disable("x-powered-by");
+app.use(helmet());
 
 // NOTE: no body parsers here. The gateway must forward request bodies
 // (POST /signup, /login, /shorten) to downstream services untouched.
@@ -38,6 +42,8 @@ app.use(
   legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    xfwd: true,
+    proxyTimeout: 10000,
     on: { error: missingService("URL Service") },
   })
 );
@@ -48,6 +54,8 @@ app.use(
   legacyCreateProxyMiddleware({
     target: ANALYTICS_SERVICE,
     changeOrigin: true,
+    xfwd: true,
+    proxyTimeout: 10000,
     on: { error: missingService("Analytics Service") },
   })
 );
@@ -58,6 +66,8 @@ app.use(
   legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    xfwd: true,
+    proxyTimeout: 10000,
     on: { error: missingService("URL Service") },
   })
 );
@@ -68,6 +78,8 @@ app.use(
   legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    xfwd: true,
+    proxyTimeout: 10000,
     on: { error: missingService("URL Service") },
   })
 );
@@ -80,6 +92,8 @@ app.use(
   legacyCreateProxyMiddleware({
     target: URL_SERVICE,
     changeOrigin: true,
+    xfwd: true,
+    proxyTimeout: 10000,
     on: { error: missingService("URL Service") },
   })
 );

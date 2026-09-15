@@ -22,7 +22,7 @@ They share the Postgres schema (a single `Prisma` schema at the repo root) and a
 - **Fast redirects** — Redis cache-aside pattern on the redirect path (1-hour TTL)
 - **Click tracking** — every redirect publishes a fire-and-forget event to Kafka (`link-clicked` topic); the analytics consumer writes the analytics record and updates `clickCount` asynchronously
 - **Link expiry** — expired links return `410 Gone`
-- **Rate limiting** — Redis-based fixed window (5 req/min per user/IP) on `POST /shorten`
+- **Rate limiting** — Redis-based fixed window (5 req/min per user/IP) on `POST /shorten`; 10 req/min per IP on `POST /signup` and `POST /login`, plus per-account throttling on failed logins
 - **Input validation** — Zod schemas with URL scheme whitelisting (`http://` / `https://`)
 - **Analytics endpoint** — total clicks, clicks-per-day (last 7 days), top referrers, recent clicks (`analytics-service`)
 
@@ -170,13 +170,15 @@ This generates the shared Prisma client into `generated/prisma` (gitignored) use
 
 ### 4. Configure environment variables
 
-Copy the root example to `.env`:
+A single **root `.env`** is the source of truth for every process (url-service, analytics-service, the Kafka consumer, the gateway, and docker-compose). Copy the example to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` with your actual credentials (database URL, JWT secret, Redis host/password, etc.).
+Then edit `.env` with your actual credentials (database URL, JWT secret, Redis host/password, etc.). The gateway, analytics service, and consumer load the root `.env` directly — there is no per-service `.env` to keep in sync.
+
+> All secrets (db passwords, replication password, JWT secret) are consumed from environment variables only, and `.env` is gitignored. The example file ships placeholder values only.
 
 ### 5. Install the gateway dependencies
 
@@ -215,7 +217,7 @@ All endpoints below are accessed through the **gateway** on port `3000`.
 | `POST` | `/shorten` | url | Optional Bearer | Yes (5/60s) | Create a short URL for `{ url }` | `201 { ...url }` or `200` (duplicate) |
 | `GET` | `/:code` | url | — | — | Redirect to the long URL | `302` redirect |
 | `GET` | `/me/urls` | url | Required Bearer | — | List authenticated user's URLs | `200 [{ ...url }, ...]` |
-| `GET` | `/analytics/:code` | analytics | — | — | Click analytics for a short code | `200 { shortCode, totalClicks, clickOverTime, topReferrers, recentClicks }` |
+| `GET` | `/analytics/:code` | analytics | Required Bearer | — | Click analytics for a short code (own URLs only) | `200 { shortCode, totalClicks, clickOverTime, topReferrers, recentClicks }` |
 
 > The `url-service` also exposes `GET /health` (primary connectivity) and serves the frontend at `/`.
 > The `analytics-service` exposes `GET /health` (replica connectivity).

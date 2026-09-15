@@ -5,7 +5,8 @@ import { Kafka, Partitioners } from "kafkajs";
 import { processClickEvent, disconnect } from "./services/consumer.service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: path.join(__dirname, ".env") });
+// Single source of truth for config: the repo-root .env
+loadDotenv({ path: path.join(__dirname, "../../.env") });
 
 const brokers = (process.env.KAFKA_BROKER || "localhost:9092").split(",");
 const kafka = new Kafka({ clientId: "analytics-consumer", brokers });

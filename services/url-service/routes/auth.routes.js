@@ -1,10 +1,11 @@
 const { Router } = require("express");
 const { signupSchema, loginSchema } = require("../schemas/auth.schema");
 const { signup, login, AppError } = require("../services/auth.service");
+const { rateLimit } = require("../middleware/rateLimit");
 
 const router = Router();
 
-router.post("/signup", async (req, res) => {
+router.post("/signup", rateLimit("auth", { limit: 10, window: 60 }), async (req, res) => {
   const result = signupSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: result.error.issues[0].message });
@@ -21,7 +22,7 @@ router.post("/signup", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", rateLimit("auth", { limit: 10, window: 60 }), async (req, res) => {
   const result = loginSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: result.error.issues[0].message });

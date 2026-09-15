@@ -6,7 +6,8 @@ import { PrismaClient } from "../../../generated/prisma/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: path.join(__dirname, "../.env") });
+// Single source of truth for config: the repo-root .env
+loadDotenv({ path: path.join(__dirname, "../../.env") });
 
 const poolPrimary = new Pool({ connectionString: process.env.DATABASE_URL });
 const prismaPrimary = new PrismaClient({ adapter: new PrismaPg(poolPrimary) });
@@ -34,11 +35,20 @@ export async function checkHealth() {
   }
 }
 
-export async function getAnalytics(code) {
+export async function getAnalytics(code, userId) {
   const db = await getDb();
 
   const url = await db.url.findUnique({ where: { shortCode: code } });
   if (!url) return null;
+
+  // Object-level access control: analytics for an owned link are only visible
+  // to the owning user. Anonymous links stay viewable to any authenticated user
+  // (they have no owner).
+  if (url.userId && url.userId.toString() !== String(userId)) {
+    const err = new Error("You do not have access to this short URL");
+    err.statusCode = 403;
+    throw err;
+  }
 
   const totalClicks = url.clickCount;
 

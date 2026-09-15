@@ -17,6 +17,7 @@ BigInt.prototype.toJSON = function () {
 
 const app = express();
 
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
 const corsOptions = config.corsOrigin
@@ -43,7 +44,10 @@ app.use((err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
   }
-  res.status(500).json({ error: "Internal server error" });
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: status >= 500 ? "Internal server error" : err.message || "Bad request",
+  });
 });
 
 async function start() {

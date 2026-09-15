@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { auth } from "../middleware/auth.js";
 import { getAnalytics, checkHealth } from "../services/analytics.service.js";
 
 const router = Router();
@@ -12,11 +13,11 @@ router.get("/health", async (req, res) => {
   }
 });
 
-router.get("/analytics/:code", async (req, res) => {
+router.get("/analytics/:code", auth, async (req, res) => {
   const { code } = req.params;
 
   try {
-    const data = await getAnalytics(code);
+    const data = await getAnalytics(code, req.userId);
 
     if (!data) {
       return res.status(404).json({ error: "Short URL not found" });
@@ -24,6 +25,9 @@ router.get("/analytics/:code", async (req, res) => {
 
     res.status(200).json(data);
   } catch (err) {
+    if (err && err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error("Analytics error:", err);
     res.status(500).json({ error: "Failed to fetch analytics" });
   }

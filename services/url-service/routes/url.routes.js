@@ -31,6 +31,13 @@ router.get("/:code", async (req, res) => {
       return res.status(410).json({ error: "This link has expired" });
     }
 
+    // Defense in depth: never redirect to anything but http(s). Even though
+    // values are validated at creation, this guards against any stored value
+    // that should not end up as a navigation target (open-redirect safety).
+    if (!/^https?:\/\//i.test(result.longUrl)) {
+      return res.status(400).json({ error: "Invalid redirect target" });
+    }
+
     return res.redirect(result.longUrl);
   } catch (err) {
     res.status(500).json({ error: "Something went wrong" });
