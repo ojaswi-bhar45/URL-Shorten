@@ -22,7 +22,7 @@ const corsOptions = process.env.CORS_ORIGIN
   : {};
 app.use(cors(corsOptions));
 
-const URL_SERVICE = process.env.URL_SERVICE_URL || "http://localhost:3001";
+const URL_SERVICE = process.env.URL_SERVICE_URL || "http://localhost:9000";
 const ANALYTICS_SERVICE = process.env.ANALYTICS_SERVICE_URL || "http://localhost:4000";
 
 function missingService(name) {
