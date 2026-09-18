@@ -3,11 +3,11 @@ import { check, sleep } from "k6";
 
 export const options = {
   vus: 20,
-  duration: "30s",
+  duration: "10s",
 };
 
 export default function () {
-  const res = http.get("http://localhost:3000/NmVExOy", {
+  const res = http.get("http://localhost:3000/BBPWM8F", {
     redirects: 0,
   });
 
