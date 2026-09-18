@@ -31,5 +31,5 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.ANALYTICS_PORT || process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Analytics Service running on port ${PORT}`));
