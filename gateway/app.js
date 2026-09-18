@@ -60,7 +60,7 @@ app.use(
   })
 );
 
-// Route auth requests to URL Service (port 3001)
+// Route auth requests to URL Service (via Nginx LB :9000 → 3001/3002)
 app.use(
   ["/signup", "/login", "/me"],
   legacyCreateProxyMiddleware({
@@ -72,7 +72,7 @@ app.use(
   })
 );
 
-// Route URL shortening requests to URL Service (port 3001)
+// Route URL shortening requests to URL Service (via Nginx LB :9000 → 3001/3002)
 app.use(
   ["/shorten"],
   legacyCreateProxyMiddleware({
@@ -85,8 +85,8 @@ app.use(
 );
 
 // Catch-all: short codes (single-segment paths like /QjY7qMi) plus the
-// frontend static assets, all served by URL Service. Must be registered
-// AFTER the specific routes above so it doesn't swallow them.
+// frontend static assets, all served by URL Service via Nginx LB :9000. Must be
+// registered AFTER the specific routes above so it doesn't swallow them.
 app.use(
   "/",
   legacyCreateProxyMiddleware({

@@ -14,9 +14,11 @@ function rateLimit(keyPrefix, options = {}) {
       const key = `rateLimit:${keyPrefix}:${identifier}`;
 
       // NOTE: req.ip is trusted here because the gateway sets X-Forwarded-For
-      // (xfwd: true) and url-service runs with trust proxy: 1, so req.ip is the
-      // real client address, not the gateway's. Spoofed X-Forwarded-For values
-      // from clients are appended to, never trusted.
+      // (xfwd: true), nginx appends its hop (proxy_add_x_forwarded_for), and
+      // url-service runs with trust proxy: 2. With both hops trusted, req.ip is
+      // the real client address, not the gateway's or nginx's. Spoofed
+      // X-Forwarded-For values from clients can't reach this service directly,
+      // so the chain can't be fooled.
 
       const current = await redisClient.incr(key);
       if (current === 1) {

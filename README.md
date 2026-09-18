@@ -48,6 +48,7 @@ Each service owns its own data-access patterns and scales independently: **URL S
 ## Architecture (Microservices)
 
 - **API Gateway** (port 3000) — single public entry point, routes requests to internal services
+- **Nginx Load Balancer** (port 9000) — distributes URL Service traffic across instances (3001/3002)
 - **URL Service** (port 3001) — URL shortening, redirects, auth, Redis caching/rate limiting
 - **Analytics Service** (port 4000) — analytics queries (reads from replica)
 - **Consumer** — separate process, consumes Kafka click events, writes to primary
@@ -59,7 +60,7 @@ Client
   │
   ▼
 API Gateway (3000)
-  ├──► URL Service (3001) ──► Redis, Postgres Primary, Kafka (producer)
+  ├──► Nginx LB (9000) ──► URL Service (3001, 3002) ──► Redis, Postgres Primary, Kafka (producer)
   └──► Analytics Service (4000) ──► Postgres Replica (w/ fallback to primary)
                                           ▲
                                           │
@@ -201,7 +202,7 @@ npm run dev:analytics   # port 4000
 npm run dev:consumer    # background analytics processor
 ```
 
-> **Routing note:** clients only ever hit the gateway (`3000`). It proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short codes, frontend assets) to the url-service (`3001`). The url-service reads env from the repo-root `.env` — change `PORT` there if you need a different port.
+> **Routing note:** clients only ever hit the gateway (`3000`). It proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short codes, frontend assets) to the **Nginx load balancer on port `9000`**, which distributes requests across the two URL Service instances (`3001`/`3002`). Both instances read env from the repo-root `.env` — change `PORT` there if you need a different port.
 
 ## API Reference
 

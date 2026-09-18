@@ -18,7 +18,12 @@ BigInt.prototype.toJSON = function () {
 const app = express();
 
 app.disable("x-powered-by");
-app.set("trust proxy", 1);
+// Two trusted proxies sit in front of url-service: the gateway (sets X-Forwarded-For
+// via xfwd: true) and nginx (appends gateway's IP via proxy_add_x_forwarded_for).
+// Tuning trust proxy to 2 keeps req.ip resolving to the real client, so rate-limit
+// buckets and recorded click IPs stay per-client. Clients can only ever reach this
+// service through those two hops, so trusting 2 proxies is safe from spoofing.
+app.set("trust proxy", 2);
 
 const corsOptions = config.corsOrigin
   ? { origin: config.corsOrigin.split(",").map((o) => o.trim()) }

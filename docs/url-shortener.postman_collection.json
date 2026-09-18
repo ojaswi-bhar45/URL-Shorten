@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "URL Shortener API",
-    "description": "URL Shortener & Analytics Platform API collection. Run requests in order against a fresh database. All requests go through the API gateway (port 3000), which routes to url-service and analytics-service. Note: POST /shorten is rate limited to 5 requests per 60 seconds per user or IP address - wait 60 seconds between full collection runs. Auth is optional on /shorten (anonymous shortening is supported); every request counts toward the limit, including validation failures. Click analytics require the Kafka consumer (consumer.js) to be running. When a downstream service is unavailable, the gateway returns a clean 5xx JSON error instead of a raw proxy error, and continues serving the other routes - no gateway restart is required. See the 'Graceful Degradation (manual)' folder for failure-behavior tests to run with a service stopped.",
+    "description": "URL Shortener & Analytics Platform API collection. Run requests in order against a fresh database. All requests go through the API gateway (port 3000), which routes URL paths (auth, /shorten, redirects, /me) through the Nginx load balancer (port 9000) to the URL services (3001/3002) and /analytics directly to the analytics-service (4000). Note: POST /shorten is rate limited to 5 requests per 60 seconds per user or IP address - wait 60 seconds between full collection runs. Auth is optional on /shorten (anonymous shortening is supported); every request counts toward the limit, including validation failures. Click analytics require the Kafka consumer (consumer.js) to be running. When a downstream service is unavailable, the gateway (or nginx) returns a clean 5xx JSON error instead of a raw proxy error, and continues serving the other routes - no gateway restart is required. See the 'Graceful Degradation (manual)' folder for failure-behavior tests to run with a service stopped.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -93,10 +93,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Run this request manually with url-service (port 3001) stopped.",
-                  "// The gateway should return a clean JSON error, not a raw ECONNREFUSED.",
-                  "pm.test('Returns 503 or 504 when url-service is down', () => {",
-                  "  pm.expect(pm.response.code).to.be.oneOf([503, 504]);",
+                  "// Run this request manually with url-service (port 3001 and 3002) stopped.",
+                  "// Nginx (port 9000) in front returns a clean JSON 502 if the upstreams are down;",
+                  "// if nginx itself is down the gateway returns a JSON 503. The gateway should never",
+                  "// surface a raw ECONNREFUSED.",
+                  "pm.test('Returns 502, 503 or 504 when url-service is down', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([502, 503, 504]);",
                   "});",
                   "",
                   "pm.test('Returns clean JSON error', () => {",
@@ -183,14 +185,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 400', () => {",
-                  "  pm.response.to.have.status(400);",
+                  "pm.test('Status is 409', () => {",
+                  "  pm.response.to.have.status(409);",
                   "});",
                   "",
-                  "pm.test('Error is Email already exists', () => {",
+                  "pm.test('Error is account already exists', () => {",
                   "  const body = pm.response.json();",
                   "  pm.expect(body).to.have.property('error');",
-                  "  pm.expect(body.error).to.equal('Email already exists');",
+                  "  pm.expect(body.error).to.equal('An account with this email already exists');",
                   "});"
                 ]
               }
@@ -267,10 +269,10 @@
                   "  pm.response.to.have.status(400);",
                   "});",
                   "",
-                  "pm.test('Error is minimum 6 characters', () => {",
+                  "pm.test('Error is minimum 8 characters', () => {",
                   "  const body = pm.response.json();",
                   "  pm.expect(body).to.have.property('error');",
-                  "  pm.expect(body.error).to.equal('Password must be at least 6 characters long');",
+                  "  pm.expect(body.error).to.equal('Password must be at least 8 characters long');",
                   "});"
                 ]
               }
@@ -782,7 +784,7 @@
       ]
     },
     {
-      "name": "Shorten URL (invalid token ignored)",
+      "name": "Shorten URL (invalid token rejected)",
       "request": {
         "method": "POST",
         "url": {
@@ -811,14 +813,14 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status is 201', () => {",
-              "  pm.response.to.have.status(201);",
+              "pm.test('Status is 401', () => {",
+              "  pm.response.to.have.status(401);",
               "});",
               "",
-              "pm.test('Invalid token is ignored and shorten falls back to anonymous', () => {",
+              "pm.test('Invalid token is rejected (fails closed)', () => {",
               "  const body = pm.response.json();",
-              "  pm.expect(body).to.have.property('shortCode');",
-              "  pm.expect(body).to.have.property('userId', null);",
+              "  pm.expect(body).to.have.property('error');",
+              "  pm.expect(body.error).to.equal('Invalid or expired token');",
               "});"
             ]
           }
@@ -1299,9 +1301,9 @@
       "request": {
         "method": "GET",
         "url": {
-          "raw": "{{baseUrl}}/some-random-path",
+          "raw": "{{baseUrl}}/some/random/path",
           "host": ["{{baseUrl}}"],
-          "path": ["some-random-path"]
+          "path": ["some", "random", "path"]
         }
       },
       "event": [
