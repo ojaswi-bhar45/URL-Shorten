@@ -214,7 +214,6 @@ All endpoints below are accessed through the **gateway** on port `3000`.
 |---|---|---|---|---|---|---|
 | `POST` | `/signup` | url | — | — | Register a new user | `201 { id, email }` |
 | `POST` | `/login` | url | — | — | Log in, receive a JWT | `200 { token }` |
-| `GET` | `/shorten` | url | — | — | (health example) | — |
 | `POST` | `/shorten` | url | Optional Bearer | Yes (5/60s) | Create a short URL for `{ url }` | `201 { ...url }` or `200` (duplicate) |
 | `GET` | `/:code` | url | — | — | Redirect to the long URL | `302` redirect |
 | `GET` | `/me/urls` | url | Required Bearer | — | List authenticated user's URLs | `200 [{ ...url }, ...]` |
@@ -298,7 +297,6 @@ URL-Shorten/
 │   │
 │   └── analytics-service/          # Analytics Service — port 4000
 │       ├── app.js                  # Entry point — Express app for /analytics
-│       ├── config.js               # Centralized env config
 │       ├── consumer.js             # Kafka consumer process
 │       ├── routes/
 │       │   └── analytics.routes.js # GET /analytics/:code
