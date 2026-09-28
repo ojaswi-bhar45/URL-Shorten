@@ -27,8 +27,8 @@ services:
       - --smp=1
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,internal://0.0.0.0:9093
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092,internal://redpanda:9093
 
     ports:
       - "9092:9092"
@@ -53,7 +53,7 @@ services:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - rpk topic create link-clicked --brokers redpanda:9092
+      - rpk topic create link-clicked --brokers redpanda:9093
         --partitions "$$KAFKA_TOPIC_PARTITIONS" --replicas 1 --if-not-exists
     environment:
       KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
