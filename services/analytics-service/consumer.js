@@ -10,12 +10,18 @@ loadDotenv({ path: path.join(__dirname, "../../.env") });
 
 const brokers = (process.env.KAFKA_BROKER || "localhost:9092").split(",");
 const INSTANCE_ID = process.env.INSTANCE_ID || "consumer-1";
-const kafka = new Kafka({ clientId: "analytics-consumer", brokers });
+// clientId is the instance's identity as Kafka sees it, so it must be
+// per-instance. A shared literal ("analytics-consumer") makes every member
+// indistinguishable in `rpk group describe` / `kafka-consumer-groups --members`,
+// which hides exactly the thing that command exists to show: which instance
+// ended up owning which partition after a rebalance. Binding it to the same
+// INSTANCE_ID used in the log lines makes the CLI output and stdout agree.
+const kafka = new Kafka({ clientId: INSTANCE_ID, brokers });
 const consumer = kafka.consumer({ groupId: "analytics-consumer-group" });
 
 async function run() {
   await consumer.connect();
-  console.log("Consumer connected");
+  console.log(`[${INSTANCE_ID}] Consumer connected (clientId=${INSTANCE_ID})`);
 
   await consumer.subscribe({ topic: "link-clicked", fromBeginning: false });
 

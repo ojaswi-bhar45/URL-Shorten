@@ -69,7 +69,7 @@ API Gateway (3000)
 
 Redirects read from Postgres PRIMARY to avoid replication-lag 404s on freshly created links. Analytics reads from the streaming REPLICA, with automatic fallback to PRIMARY if the replica is unavailable. The consumer writes analytics (click_events + clickCount increment) to PRIMARY via a transaction. The redirect path **never writes to Postgres** — all click data flows through Kafka and is processed asynchronously by the consumer.
 
-See [architecture.md](./architecture.md) for the full system design document.
+See [docs/architecture.md](./docs/architecture.md) for the full system design document.
 
 ## Tech Stack
 
@@ -127,6 +127,99 @@ A single shared schema lives at [`prisma/schema.prisma`](./prisma/schema.prisma)
 - The analytics service runs a consumer (`consumer.js`) that processes events asynchronously, decoupling the read-heavy redirect path from write-heavy analytics
 - Consumer uses a consumer group (`analytics-consumer-group`) to support future horizontal scaling
 - Tested resilience: killing the consumer mid-traffic does not lose data — Kafka retains messages until the consumer resumes and catches up
+
+### Scaling the Click Consumer
+
+The consumer scales horizontally, but the **topic's partition count is the hard
+ceiling**: a consumer group assigns each partition to exactly one member, so on a
+`P`-partition topic only `min(N, P)` of `N` instances do useful work and the rest
+sit idle.
+
+`link-clicked` is created with **3 partitions** by the `kafka-init` service in
+`docker-compose.yml` (override with `KAFKA_TOPIC_PARTITIONS`). Exactly three
+consumer instances are therefore useful; a fourth joins the group and receives
+no partitions.
+
+**Run several consumers** — `npm run dev` starts all three at once, each as its own
+Node process with a distinct `INSTANCE_ID`:
+
+| Script                  | `INSTANCE_ID` | concurrently prefix |
+| ----------------------- | ------------- | ------------------- |
+| `npm run dev:consumer1` | `consumer-1`  | `[consumer-1]`      |
+| `npm run dev:consumer2` | `consumer-2`  | `[consumer-2]`      |
+| `npm run dev:consumer3` | `consumer-3`  | `[consumer-3]`      |
+
+Each script is `cross-env INSTANCE_ID=<id> node services/analytics-service/consumer.js`,
+so the `INSTANCE_ID` is set per process without touching `.env`. `dotenv` runs
+afterwards without `override: true`, so it never overwrites a value `cross-env`
+already provided. Running the three by hand in separate terminals still works
+(`npm run dev:consumer` plus `npx cross-env INSTANCE_ID=consumer-2 npm run
+dev:consumer`), but is unnecessary — `npm run dev` is the supported path.
+
+`INSTANCE_ID` is both the Kafka `clientId` and the log prefix, so every instance
+stays self-identifying in broker tooling and in stdout. It defaults to
+`consumer-1`, so an instance started without it is indistinguishable from the
+real `consumer-1` — always launch consumers through the `dev:consumerN` scripts.
+
+The `dev:consumerN` scripts intentionally omit `node --watch`, unlike the other
+`dev:*` services. `consumer.js` is read-only and rarely edited, and a watch
+restart would drop the instance out of the consumer group and force a rebalance
+that moves the other instances' partition assignments.
+
+**Verify the assignment** after starting a new instance — allow ~5s for the group
+to rebalance:
+
+```bash
+# Redpanda (what docker-compose.yml runs)
+docker exec redpanda rpk group describe analytics-consumer-group \
+  --brokers localhost:9092
+
+# or, with a local Kafka install
+kafka-consumer-groups --bootstrap-server localhost:9092 \
+  --group analytics-consumer-group --describe --members --verbose
+```
+
+In PowerShell the backslash continuations above don't apply — use the one-liner:
+
+```powershell
+docker exec redpanda rpk group describe analytics-consumer-group --brokers localhost:9092
+```
+
+Healthy output with three consumers on three partitions — one partition each,
+no lag:
+
+```
+MEMBERS  3      TOTAL-LAG  0
+
+TOPIC         PARTITION  LAG  CLIENT-ID
+link-clicked  0          0    consumer-1
+link-clicked  1          0    consumer-2
+link-clicked  2          0    consumer-3
+```
+
+How to read it:
+
+- A member with no partition row is **idle** — more consumers than partitions.
+- A rising `TOTAL-LAG` means the consumer cannot keep up. Scaling out only helps
+  once the partition count has been raised.
+- `PARTITION` + `CLIENT-ID` together confirm the load actually spread, which is
+  what this command exists to prove.
+
+**Growing past 3 partitions** — `npm run kafka:init` is idempotent and never
+resizes an existing topic (`--if-not-exists`), so increasing the count is a manual
+step:
+
+```bash
+docker exec redpanda rpk topic update-partitions link-clicked --brokers localhost:9092 --partitions 6
+```
+
+Growing a partition count cannot move existing messages between old and new
+partitions, which would be a problem for a keyed, order-sensitive stream. It is
+safe here: click events are published without a partition key, every consumer in
+the group runs identical logic, and the only ordering guarantee needed is
+per-`shortCode` — which already holds because each code lands on one partition and
+is processed by one consumer at a time. Raise `KAFKA_TOPIC_PARTITIONS` alongside
+the command so a fresh stack comes up with the larger count.
 
 ## Replication
 
@@ -201,6 +294,21 @@ npm run dev:url         # port 3001 (configurable via PORT in .env)
 npm run dev:analytics   # port 4000
 npm run dev:consumer    # background analytics processor
 ```
+
+Or start the whole stack — both URL Service instances, the analytics service, the
+gateway, and all three consumer instances — in one command:
+
+```bash
+npm run dev
+```
+
+Each process is prefixed with its own label, so consumer output stays
+distinguishable: `[url]`, `[url2]`, `[analytics]`, `[gateway]`, `[consumer-1]`,
+`[consumer-2]`, `[consumer-3]`. Press `Ctrl+C` once to stop them all.
+
+> **Before starting `npm run dev`:** stop any consumer instances you were running
+> by hand. Leaving them up gives the group more members than the topic has
+> partitions, and the extra instances sit idle instead of consuming.
 
 > **Routing note:** clients only ever hit the gateway (`3000`). It proxies `/analytics` to the analytics service (`4000`) and everything else (`/signup`, `/login`, `/me`, `/shorten`, short codes, frontend assets) to the **Nginx load balancer on port `9000`**, which distributes requests across the two URL Service instances (`3001`/`3002`). Both instances read env from the repo-root `.env` — change `PORT` there if you need a different port.
 
@@ -307,11 +415,12 @@ URL-Shorten/
 │
 ├── gateway/                        # API Gateway — public entry point, port 3000
 │   ├── app.js                      # Proxy routes to url-service + analytics-service
-│   ├── package.json                # Express + http-proxy-middleware
-│   └── .env                        # PORT + downstream service URLs
+│   └── package.json                # Express + http-proxy-middleware (standalone install)
 │
 ├── generated/prisma/               # Shared generated Prisma client (gitignored)
-└── docs/                           # Postman collection
+├── docs/
+│   ├── architecture.md             # Full system design document
+│   └── url-shortener.postman_collection.json
 ```
 
 ## Security Notes

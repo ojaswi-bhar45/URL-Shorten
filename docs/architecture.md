@@ -178,6 +178,25 @@ decoupling the latency-sensitive read path from the write-heavy analytics path.
 4. Killing the consumer mid-traffic loses no data — Kafka retains messages until it
    resumes and catches up.
 
+**Parallelism ceiling.** A consumer group assigns each partition to exactly one
+member, so useful parallelism is capped by the topic's partition count, not by the
+number of running instances. `link-clicked` is provisioned with 3 partitions by the
+`kafka-init` compose service, so three consumer instances are useful and a fourth
+joins idle. Each instance advertises a distinct `clientId` (from `INSTANCE_ID`,
+defaulting to `consumer-1`) so `rpk group describe` can attribute each partition to
+the instance that owns it after a rebalance. Raising the partition count is a manual
+step — see "Scaling the Click Consumer" in the README.
+
+`npm run dev` starts all three consumer instances, each as its own Node process
+(`dev:consumer1` / `dev:consumer2` / `dev:consumer3`, which set `INSTANCE_ID` via
+`cross-env`), alongside the gateway, both URL Service instances, and the analytics
+service. `concurrently` labels each stream `[consumer-1]`, `[consumer-2]`,
+`[consumer-3]` so their output stays separable in one terminal. Starting the
+instances manually in separate terminals remains supported as a fallback. These
+scripts omit `node --watch` (unlike the other `dev:*` services) because a watch
+restart would evict the instance from the group and force a rebalance that moves
+the other instances' partition assignments.
+
 ## 5. Components
 
 | Component                    | File                                                    | Responsibility                                        |
@@ -200,7 +219,7 @@ decoupling the latency-sensitive read path from the write-heavy analytics path.
 | Analytics route              | `services/analytics-service/routes/analytics.routes.js` | `GET /analytics/:code`, `GET /health`                 |
 | Analytics auth middleware    | `services/analytics-service/middleware/auth.js`         | JWT verification                                      |
 | Analytics query logic        | `services/analytics-service/services/analytics.service.js` | Replica reads w/ primary fallback, aggregations    |
-| Click consumer process       | `services/analytics-service/consumer.js`                | Kafka consumer loop                                   |
+| Click consumer process       | `services/analytics-service/consumer.js`                | Kafka consumer loop (3 instances via `npm run dev`)   |
 | Click processing             | `services/analytics-service/services/consumer.service.js` | Sanitize + transaction: insert event, bump clickCount |
 | Shared Kafka producer        | `packages/shared/kafka.js`                              | Producer with reconnect + fail-open send              |
 | Shared Prisma factories      | `packages/shared/db.js`                                 | Primary/replica `PrismaClient` via pg adapter         |
@@ -401,7 +420,7 @@ URL-Shorten/
 │   └── package.json                # Express + http-proxy-middleware
 │
 ├── generated/prisma/              # Shared generated Prisma client (gitignored)
-└── docs/                          # Postman collection
+└── docs/                          # architecture.md (this file) + Postman collection
 ```
 
 ## 11. Future Roadmap
