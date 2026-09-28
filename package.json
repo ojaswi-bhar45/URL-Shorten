@@ -24,7 +24,8 @@
     "prisma:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema=prisma/schema.prisma",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "kafka:init": "docker compose run --rm kafka-init"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.2",

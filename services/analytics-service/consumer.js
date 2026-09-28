@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotenv({ path: path.join(__dirname, "../../.env") });
 
 const brokers = (process.env.KAFKA_BROKER || "localhost:9092").split(",");
+const INSTANCE_ID = process.env.INSTANCE_ID || "consumer-1";
 const kafka = new Kafka({ clientId: "analytics-consumer", brokers });
 const consumer = kafka.consumer({ groupId: "analytics-consumer-group" });
 
@@ -19,9 +20,12 @@ async function run() {
   await consumer.subscribe({ topic: "link-clicked", fromBeginning: false });
 
   await consumer.run({
-    eachMessage: async ({ message }) => {
+    eachMessage: async ({ topic, partition, message }) => {
       try {
         const event = JSON.parse(message.value.toString());
+        console.log(
+          `[${INSTANCE_ID}] Received message on partition ${partition}`
+        );
         await processClickEvent(event);
       } catch (err) {
         console.error("Error processing message:", err);

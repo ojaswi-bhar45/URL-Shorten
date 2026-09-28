@@ -7,7 +7,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Single source of truth for config: the repo-root .env
-loadDotenv({ path: path.join(__dirname, "../../.env") });
+loadDotenv({ path: path.join(__dirname, "../../../.env") });
+
+// Fail fast on a missing connection string. dotenv no-ops silently when the
+// path is wrong, which would leave the connection string undefined and make pg
+// fall back to the OS user instead of erroring clearly.
+if (!process.env.DATABASE_URL || !process.env.DATABASE_REPLICA_URL) {
+  throw new Error(
+    "Missing required environment variable: DATABASE_URL and/or DATABASE_REPLICA_URL"
+  );
+}
 
 const poolPrimary = new Pool({ connectionString: process.env.DATABASE_URL });
 const prismaPrimary = new PrismaClient({ adapter: new PrismaPg(poolPrimary) });

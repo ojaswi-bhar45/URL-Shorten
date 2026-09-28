@@ -33,6 +33,32 @@ services:
     ports:
       - "9092:9092"
 
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Provisions the click-event topic explicitly instead of letting Redpanda
+  # auto-create it on first produce with the cluster default (1 partition).
+  # The partition count is the hard ceiling on consumer-group parallelism, so
+  # it has to be a declared value rather than a broker default. Idempotent:
+  # --if-not-exists makes re-running this a no-op. It never resizes an
+  # existing topic — see the README for the manual update-partitions path.
+  kafka-init:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: kafka-init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - rpk topic create link-clicked --brokers redpanda:9092
+        --partitions "$$KAFKA_TOPIC_PARTITIONS" --replicas 1 --if-not-exists
+    environment:
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+    restart: "no"
+
   postgres-primary:
     image: postgres:16
     container_name: postgres-primary
