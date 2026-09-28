@@ -31,7 +31,12 @@ const corsOptions = config.corsOrigin
 
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(morgan("combined"));
+// Each request line is prefixed with the listening port of the instance that
+// handled it. Both instances run this identical line but resolve config.port
+// from their own environment (3001 from .env, 3002 from the cross-env
+// override), so the log is self-identifying without any wrapper having to
+// label the stream. This is what makes nginx load balancing observable.
+app.use(morgan(`[${config.port}] :method :url :status :res[content-length] :response-time ms`));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
